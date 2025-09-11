@@ -1,7 +1,7 @@
 ---
 title: "COSMIC Science"
 ---
-Welcome to my website
+My name is Starlette John, Current Master student in Business Analytics with a background in Economics. Welcome to my website to show my fun coding projects.
 
 ```{r}
 #| echo: false
