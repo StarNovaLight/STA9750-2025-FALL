@@ -95,7 +95,7 @@ COUNTRY_TOP_10 <- read_tsv(COUNTRY_TOP_10_FILENAME)
 library(DT)
 GLOBAL_TOP_10 |> 
     head(n=20) |>
-    datatable(options=list(searching=FALSE, info=FALSE))
+    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
    
 
 library(stringr)
@@ -106,49 +106,35 @@ format_titles <- function(df){
 ```
 
 ```{r}
-##GLOBAL_TOP_10 |> 
-    ##format_titles() |>
-    ##head(n=20) |>
-    ##datatable(options=list(searching=FALSE, info=FALSE)) |>
-   ## formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
+GLOBAL_TOP_10 |> 
+    format_titles() |>
+    head(n=20) |>
+    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) |>
+    formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
 ```
 
 ```{r} 
-##GLOBAL_TOP_10 |> 
-    ##select(-season_title) |>
-    ##format_titles() |>
-    ##head(n=20) |>
-   ## datatable(options=list(searching=FALSE, info=FALSE)) |>
-    ##formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
+GLOBAL_TOP_10 |> 
+    select(-season_title) |>
+    format_titles() |>
+    head(n=20) |>
+    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) |>
+    formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
 
 ```
 
 ```{r}
-#GLOBAL_TOP_10 |> 
-    #mutate(`runtime_(minutes)` = round(60 * runtime)) |>
-    #select(-season_title, 
-         #  -runtime) |>
-    #format_titles() |>
-    #head(n=20) |>
-    #datatable(options=list(searching=FALSE, info=FALSE)) |>
-   # formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
+GLOBAL_TOP_10 |> 
+    mutate(`runtime_(minutes)` = round(60 * runtime)) |>
+    select(-season_title, 
+           -runtime) |>
+    format_titles() |>
+    head(n=20) |>
+    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) |>
+    formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
 ```
 
-```{r}
-##GLOBAL_TOP_10 |> 
-   ## mutate(`runtime_(minutes)` = round(60 * runtime)) |>
-    ##select(-season_title, 
-    ##       -runtime) |>
-    ##format_titles() |>
-    ##head(n=20) |>
-    ##datatable(style= "default", , 
-             # options=list(searching=FALSE, 
-                           #info=FALSE, 
-              #initComplete = JS(
-        #'function() {$("html").attr("data-bs-theme", "dark");}'
-           #  ))) |>
-    ##formatRound(c('Weekly Hours Viewed', 'Weekly Views'))
-```
+
 
 
 Press Release's:
@@ -161,8 +147,8 @@ Press Release's:
 
 num_countries<-COUNTRY_TOP_10|>
   summarize(total_countries=sum(n_distinct(country_name)))|>
-  ungroup()|>
-  format_titles()
+  ungroup()
+  
 
 
 
@@ -174,7 +160,7 @@ num_countries<-COUNTRY_TOP_10|>
 ```
 
 
-Netflix has a lot of influence all over the world, as currently I found that are a total of [`r num_countries``]{style='color:cyan;'}  countries. This show that Netflix has the impacted and influence world's entertainment streaming services.
+Netflix has a lot of influence all over the world, as currently I found that are a total of [`r num_countries$country_name`]{style='color:cyan;'}  countries. This show that Netflix has the impacted and influence world's entertainment streaming services.
 
 
 
@@ -187,6 +173,8 @@ Netflix has a lot of influence all over the world, as currently I found that are
    group_by(show_title)|>
    summarize(most_weeks=max(cumulative_weeks_in_top_10))|>
    slice_max(most_weeks,n=1)
+
+  
 
 
   
@@ -221,8 +209,11 @@ most_popular<-GLOBAL_TOP_10|>
   group_by(category,show_title)|>
   summarize(highest_hours_global_viewership=sum(weekly_hours_viewed))|>
               slice_max(highest_hours_global_viewership, n=1) |>
-  format_titles()|>
-  head(n=4) 
+  format_titles() |>
+  head(n=20) |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) |>
+  formatRound(c('Highest Hours Global Viewership'))
+ 
   
 
 most_popular
@@ -312,7 +303,10 @@ Number_1<-COUNTRY_TOP_10|>
   filter(country_name=='United States',(weekly_rank!=1)==(cumulative_weeks_in_top_10==1),year(week)==2025)|>
   summarize(weeks_to_1=cumulative_weeks_in_top_10,is_number_1=sum(weekly_rank==1)) |>
   filter(is_number_1==1)|>
-  ungroup()
+  ungroup()|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+ 
  
 
   
@@ -328,15 +322,28 @@ Number_1
 ```
 
 ```{r}
-shows<-Number_1|>
-  summarize(total_shows=sum(n_distinct(show_title)))|>
-                            ungroup()|>
-  format_titles()
+#| output: false
+shows<-COUNTRY_TOP_10|>
+  group_by(week,show_title,season_title)|>
+  filter(country_name=='United States',(weekly_rank!=1)==(cumulative_weeks_in_top_10==1),year(week)==2025)|>
+  summarize(weeks_to_1=cumulative_weeks_in_top_10,is_number_1=sum(weekly_rank==1)) |>
+  filter(is_number_1==1)|>
+  ungroup()
+ 
 
 
  shows                           
 ```
-The most recent film to reach number 1 that has never been there before was Unknown Number: The High School Catfish. It appears once on the list when looking at the most recent weeks of when these shows reached #1 as took 2 weeks. However, repeated shows/films up in the data as sometimes they would reclaim the number #1 spot after being dethrone. However there is a total of [`r shows`]{style='color:cyan'} shows/films that didn’t debut at number 1.
+```{r}
+shows_total<-shows|>
+  summarize(sum(n_distinct(show_title)))|>
+   ungroup()
+
+shows_total
+```
+
+
+The most recent film to reach number 1 that has never been there before was Unknown Number: The High School Catfish. It appears once on the list when looking at the most recent weeks of when these shows reached #1 as took 2 weeks. However, repeated shows/films up in the data as sometimes they would reclaim the number #1 spot after being dethrone. However there is a total of [`r shows_total`]{style='color:cyan'} shows/films that didn’t debut at number 1.
 
 
 
@@ -349,7 +356,9 @@ COUNTRY_TOP_10|>
   summarize(total_countries=sum(n_distinct(country_name)))|>
   ungroup()|>
  slice_max(total_countries, n=1) |>
- format_titles()
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+ 
 
 
 ```
@@ -386,7 +395,9 @@ India_Media<- COUNTRY_TOP_10|>
   filter(country_name=='India',country_name!='United States')|>
   summarize(most_popular=max(cumulative_weeks_in_top_10))|>
   slice_max(most_popular, n=5)|>
-  format_titles()
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+ 
  
 India_Media
   
@@ -425,7 +436,9 @@ COUNTRY_TOP_10|>
   summarize(number_of_weeks_in_1_spot=sum(weekly_rank==1),number_of_weeks_in_consecutively_top_10=max(cumulative_weeks_in_top_10))|>
   slice_max(number_of_weeks_in_1_spot, n=10)|>
   format_titles()|>
-  head(n=10) 
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+ 
 
 
 ```
@@ -436,7 +449,7 @@ GLOBAL_TOP_10|>
   summarize(number_of_weeks_in_1_spot=sum(weekly_rank==1),number_of_weeks_in_consecutively_top_10=max(cumulative_weeks_in_top_10))|>
   slice_max(number_of_weeks_in_1_spot, n=10)|>
   format_titles()|>
-  head(n=10) 
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
 ```
  
  Press Release 3: South Korea is now becoming a leading force in the entertainment industry:
