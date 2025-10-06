@@ -160,7 +160,7 @@ num_countries<-COUNTRY_TOP_10|>
 ```
 
 
-Netflix has a lot of influence all over the world, as currently I found that are a total of [`r num_countries$country_name`]{style='color:cyan;'}  countries. This show that Netflix has the impacted and influence world's entertainment streaming services.
+Netflix has a lot of influence all over the world, as currently I found that are a total of [`r num_countries`]{style='color:cyan;'}  countries. This show that Netflix has the impacted and influence world's entertainment streaming services.
 
 
 
@@ -185,24 +185,40 @@ popular_Non_English
  
   
 ```
-Netflix is a streaming platform, that help viewers enjoy other countries movies/shows, with the provided subtitles and connects people. For instance the Non-English film that spent the most weeks in the Global top 10 on Netflix is the [`r popular_Non_English$show_title`]{style='color:cyan;'}, as it spent consecutive [`r popular_Non_English$most_weeks`]{style='color:cyan;'} in the charts.
+Netflix is a streaming platform, that help viewers enjoy other countries movies, with the provided subtitles and connects people. For instance the Non-English film that spent the most weeks in the Global top 10 on Netflix is the [`r popular_Non_English$show_title`]{style='color:cyan;'}, as it spent consecutive [`r popular_Non_English$most_weeks`]{style='color:cyan;'} in the charts.
  
 
 ```{r}
 
 longest_run<-GLOBAL_TOP_10|>
   group_by(show_title)|>
-  summarize(longest_film=max(round(60*runtime)))|>
-  slice_max(longest_film, n=1)
+  filter(category=='Films (English)')|>
+  summarize(longest_film=max(60 *runtime))|>
+  slice_max(longest_film)
+ 
   
 
 longest_run
 
 
 ```
+```{r}
 
-Netflix longest running film is [`r longest_run$show_title`]{style='color:cyan;'}. It's approximately about s [`r longest_run$longest_film`]{style='color:cyan;'} minutes long, which means 48 hours. This show is providing 2 full days’ worth of entertainment.
+longest_run2<-GLOBAL_TOP_10|>
+  group_by(show_title)|>
+  filter(category=='Films (Non-English)')|>
+  summarize(longest_film=max(round(60 *runtime)))|>
+  slice_max(longest_film)
  
+  
+
+longest_run2
+```
+
+
+Netflix longest running film is [`r longest_run2$show_title`]{style='color:cyan;'}. It's approximately about s [`r longest_run2$longest_film`]{style='color:cyan;'}  minutes long, providing almost 4 hours of entertainment.
+  
+
  
 ```{r}
 most_popular<-GLOBAL_TOP_10|>
@@ -228,6 +244,7 @@ The shows/films that gained the most hours viewed are Kpop Demon Hunters, Societ
 
 longest_country_run<-COUNTRY_TOP_10|>
   group_by(country_name,show_title)|>
+  filter(category=='TV')|>
   summarize(longest_run=max(cumulative_weeks_in_top_10))|>
   ungroup()|>
   slice_max(longest_run, n=1)
@@ -300,7 +317,7 @@ Red Notice was the number 1 movie that  took over Netflix back in 2021, with an 
 ```{r}
 Number_1<-COUNTRY_TOP_10|>
   group_by(week,show_title,season_title)|>
-  filter(country_name=='United States',(weekly_rank!=1)==(cumulative_weeks_in_top_10==1),year(week)==2025)|>
+  filter(country_name=='United States',category=='Films',(weekly_rank!=1)==(cumulative_weeks_in_top_10==1),year(week)==2025)|>
   summarize(weeks_to_1=cumulative_weeks_in_top_10,is_number_1=sum(weekly_rank==1)) |>
   filter(is_number_1==1)|>
   ungroup()|>
@@ -324,8 +341,9 @@ Number_1
 ```{r}
 #| output: false
 shows<-COUNTRY_TOP_10|>
-  group_by(week,show_title,season_title)|>
-  filter(country_name=='United States',(weekly_rank!=1)==(cumulative_weeks_in_top_10==1),year(week)==2025)|>
+  group_by(week,show_title)|>
+  filter(country_name=='United States',category=='Films',(weekly_rank!=1)==(cumulative_weeks_in_top_10==1),year(week)==2025)|>
+  select(-season_title)|>
   summarize(weeks_to_1=cumulative_weeks_in_top_10,is_number_1=sum(weekly_rank==1)) |>
   filter(is_number_1==1)|>
   ungroup()
@@ -343,7 +361,7 @@ shows_total
 ```
 
 
-The most recent film to reach number 1 that has never been there before was Unknown Number: The High School Catfish. It appears once on the list when looking at the most recent weeks of when these shows reached #1 as took 2 weeks. However, repeated shows/films up in the data as sometimes they would reclaim the number #1 spot after being dethrone. However there is a total of [`r shows_total`]{style='color:cyan'} shows/films that didn’t debut at number 1.
+The most recent film to reach number 1 that has never been there before was Unknown Number: The High School Catfish. It appears once on the list when looking at the most recent weeks of when these shows reached #1 as took 2 weeks. However, repeated films come up in the data as sometimes they would reclaim the number #1 spot after being dethrone. However there is a total of [`r shows_total`]{style='color:cyan'} films that didn’t debut at number 1.
 
 
 
@@ -352,7 +370,7 @@ The most recent film to reach number 1 that has never been there before was Unkn
 
 COUNTRY_TOP_10|>
   group_by(show_title,season_title)|>
-  filter(cumulative_weeks_in_top_10==1)|>
+  filter(cumulative_weeks_in_top_10==1,category=='TV')|>
   summarize(total_countries=sum(n_distinct(country_name)))|>
   ungroup()|>
  slice_max(total_countries, n=1) |>
@@ -363,7 +381,7 @@ COUNTRY_TOP_10|>
 
 ```
 
-In the list above shows the number of shows/films and their respective season that made it on the top 10 Netflix list in their debut week.
+In the list above shows the number of TV shows and their respective season that made it on the top 10 Netflix list in their debut week in the most countries.
 
 
 
@@ -392,9 +410,9 @@ Stranger Things is back and bigger than ever before. Join us and let’s watch t
 
 India_Media<- COUNTRY_TOP_10|>
   group_by(show_title)|>
-  filter(country_name=='India',country_name!='United States')|>
+  filter(country_name=='India',country_name!='United States', category=='Films')|>
   summarize(most_popular=max(cumulative_weeks_in_top_10))|>
-  slice_max(most_popular, n=5)|>
+  slice_max(most_popular, n=10)|>
   format_titles() |>
   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
  
@@ -408,7 +426,7 @@ India_Media
 
 first_show<-GLOBAL_TOP_10|>
   group_by(show_title)|>
-  filter(show_title=='The Railway Men - The Untold Story Of Bhopal 1984')|>
+  filter(show_title=='	Animal')|>
   summarize(total_viewers=sum(weekly_hours_viewed)/sum(runtime),total_weekly_views=sum(weekly_views))
 first_show
 ```
@@ -416,14 +434,14 @@ first_show
 
 second_show<-GLOBAL_TOP_10|>
   group_by(show_title)|>
-  filter(show_title=='Khakee: The Bihar Chapter')|>
+  filter(show_title=='	Haseen Dillruba')|>
   summarize(total_weekly_hours=sum(weekly_hours_viewed),total_weekly_views=sum(weekly_views,na.rm=TRUE))
 second_show
 ```
 
 Press Release: India Most Popular Hindi Films.
 
-Netflix have a variety of shows and films that comes from different cultures. I took the opportunity to go watch some Hindi language films. I was the most popular Hindi language films such as The Railway Men- The Untold Story of Bhopal 1984 and Khakee: The Bihar Chapter. for instance The Railway Men- The Untold Story of Bhopal 1984 has a total of over [`r first_show$total_viewers`]{style='color:cyan;'}  viewers when on the top 10 and a total of [`r first_show$total_weekly_views`]{style='color:cyan;'} weekly views. Khakee: The Bhar Chapter has [`r second_show$total_weekly_hours`]{style='color:cyan;'} hours watched.  These films were completely in Hindi, but don't worry if you want to watch films that are in a different language subtitles are very useful. These films entertained me and brought me joy to watch.
+Netflix have a variety of shows and films that comes from different cultures. I took the opportunity to go watch some Hindi language films. I was the most popular Hindi language films such as	Animal and Haseen Dillruba. For instance Animal has a total of over [`r first_show$total_viewers`]{style='color:cyan;'}  viewers when on the top 10 and a total of [`r first_show$total_weekly_views`]{style='color:cyan;'} weekly views. 	Haseen Dillruba has [`r second_show$total_weekly_hours`]{style='color:cyan;'} hours watched.  These films were completely in Hindi, but don't worry if you want to watch films that are in a different language subtitles are very useful. These films entertained me and brought me joy to watch.
 
 
 
