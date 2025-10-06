@@ -159,7 +159,14 @@ num_countries<-COUNTRY_TOP_10|>
 
 ```
 
+```{r}
+total_countries<-COUNTRY_TOP_10|>
+    summarize(name=unique(country_name))|>
+    format_titles() |>
+    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
 
+total_countries 
+```
 Netflix has a lot of influence all over the world, as currently I found that are a total of [`r num_countries`]{style='color:cyan;'}  countries. This show that Netflix has the impacted and influence world's entertainment streaming services.
 
 
@@ -185,14 +192,14 @@ popular_Non_English
  
   
 ```
-Netflix is a streaming platform, that help viewers enjoy other countries movies, with the provided subtitles and connects people. For instance the Non-English film that spent the most weeks in the Global top 10 on Netflix is the [`r popular_Non_English$show_title`]{style='color:cyan;'}, as it spent consecutive [`r popular_Non_English$most_weeks`]{style='color:cyan;'} in the charts.
+Netflix is a streaming platform, that helps viewers enjoy other countries movies, with the provided subtitles and connects people. For instance the Non-English film that spent the most weeks in the Global top 10 on Netflix is the [`r popular_Non_English$show_title`]{style='color:cyan;'}, as it spent consecutive [`r popular_Non_English$most_weeks`]{style='color:cyan;'} in the charts.
  
 
 ```{r}
 
 longest_run<-GLOBAL_TOP_10|>
   group_by(show_title)|>
-  filter(category=='Films (English)')|>
+  filter(category=='Films (English)'|category=='Films (Non-English)')|>
   summarize(longest_film=max(60 *runtime))|>
   slice_max(longest_film)
  
@@ -202,21 +209,10 @@ longest_run
 
 
 ```
-```{r}
-
-longest_run2<-GLOBAL_TOP_10|>
-  group_by(show_title)|>
-  filter(category=='Films (Non-English)')|>
-  summarize(longest_film=max(round(60 *runtime)))|>
-  slice_max(longest_film)
- 
-  
-
-longest_run2
-```
 
 
-Netflix longest running film is [`r longest_run2$show_title`]{style='color:cyan;'}. It's approximately about s [`r longest_run2$longest_film`]{style='color:cyan;'}  minutes long, providing almost 4 hours of entertainment.
+
+Netflix longest running film is [`r longest_run$show_title`]{style='color:cyan;'}. It's approximately about s [`r longest_run$longest_film`]{style='color:cyan;'}  minutes long, providing almost 4 hours of entertainment.
   
 
  
@@ -250,7 +246,7 @@ longest_country_run<-COUNTRY_TOP_10|>
   slice_max(longest_run, n=1)
   
  
-  longest_country_run
+longest_country_run
 
   
 
@@ -361,7 +357,7 @@ shows_total
 ```
 
 
-The most recent film to reach number 1 that has never been there before was Unknown Number: The High School Catfish. It appears once on the list when looking at the most recent weeks of when these shows reached #1 as took 2 weeks. However, repeated films come up in the data as sometimes they would reclaim the number #1 spot after being dethrone. However there is a total of [`r shows_total`]{style='color:cyan'} films that didn’t debut at number 1.
+The most recent film to reach number 1 after their debut week was Unknown Number: The High School Catfish. It appears once on the list when looking at the most recent weeks of when these shows reached #1 as took 2 weeks.There is a total of [`r shows_total`]{style='color:cyan'} films that didn’t debut at number 1 but eventually reached the top spot.
 
 
 
@@ -397,10 +393,19 @@ Stranger_Things
 
 ```
 
-
+```{r}
+GLOBAL_TOP_10 |> 
+  group_by(show_title)|>
+  summarize(total_hours=sum(weekly_hours_viewed),Most_cumulative_weeks=max(cumulative_weeks_in_top_10),number_of_times_rank_1=sum(weekly_rank==1))|>
+  slice_max(total_hours,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+  
+```
 Press Release 1 : Stranger Things is Back and Bigger than Ever Before : 
 
-Stranger Things is back and bigger than ever before. Join us and let’s watch the fifth season of our favorite shows.  It's a global hit that mixes fantasy, sci-fi, adventure and drama into one of the most suspenseful shows you'll ever witness. It's a known fact that Stranger Things is one of Netflix biggest players, with a total of [`r Stranger_Things$Most_cumulative_weeks`]{style='color:cyan;'} cumulative weeks in the top 10. Globally been watch for [`r Stranger_Things$total_hours`]{style='color:cyan;'} hours. Ranked [`r Stranger_Things$number_of_times_rank_1`]{style='color:cyan;'} times in the 1 spot on Netflix's top 10.  Netflix biggest show is back and watch your favorite cast reunite once again. You don't want to miss it.
+Stranger Things is back and bigger than ever before. Join us and let’s watch the fifth season of our favorite shows.  It's a global hit that mixes fantasy, sci-fi, adventure and drama into one of the most suspenseful shows you'll ever witness. It's a known fact that Stranger Things is one of Netflix biggest players, with a total of [`r Stranger_Things$Most_cumulative_weeks`]{style='color:cyan;'} cumulative weeks in the top 10. Globally been watch for [`r Stranger_Things$total_hours`]{style='color:cyan;'} hours. Ranked [`r Stranger_Things$number_of_times_rank_1`]{style='color:cyan;'} times in the number 1 spot on Netflix's top 10. Stranger Things is ranked 2nd on Netflix Top 10 list right behind Squid Games for the most hours watched. One of Netflix's biggest show is back and watch your favorite cast reunite once again. You don't want to miss it.
 
 
 
@@ -441,8 +446,7 @@ second_show
 
 Press Release: India Most Popular Hindi Films.
 
-Netflix have a variety of shows and films that comes from different cultures. I took the opportunity to go watch some Hindi language films. I was the most popular Hindi language films such as	Animal and Haseen Dillruba. For instance Animal has a total of over [`r first_show$total_viewers`]{style='color:cyan;'}  viewers when on the top 10 and a total of [`r first_show$total_weekly_views`]{style='color:cyan;'} weekly views. 	Haseen Dillruba has [`r second_show$total_weekly_hours`]{style='color:cyan;'} hours watched.  These films were completely in Hindi, but don't worry if you want to watch films that are in a different language subtitles are very useful. These films entertained me and brought me joy to watch.
-
+Netflix have a variety of shows and films that comes from different cultures. I took the opportunity to go research some Hindi language films. In the list above are some of the most popular films in India, some of the most popular films are Animal and Haseen Dillruba. For instance Animal has a total of over [`r first_show$total_viewers`]{style='color:cyan;'}  viewers when on the top 10 and a total of [`r first_show$total_weekly_views`]{style='color:cyan;'} weekly views. 	Haseen Dillruba has a total of [`r second_show$total_weekly_hours`]{style='color:cyan;'} weekly hours watched. These films were completely in Hindi, but don't worry if you want to watch films that are in a different language subtitles are very useful. These films entertained me and were a joy to experience.
 
 
 
@@ -472,8 +476,8 @@ GLOBAL_TOP_10|>
  
  Press Release 3: South Korea is now becoming a leading force in the entertainment industry:
  
-Within the past decade you seen a rise of K-pop and Kdrama becoming popular all over the world. On Netflix Kdrama are taking the world by storm. South Korea most popular show is of course Squid Game as show originated from South Korea, this show charted 10 weeks in the number 1 top 10 Netflix list and been cumulatively in the top 10 list for 19 weeks. Another interesting in this list is that all these shows are Korean based, yet charted so well all over the world.
+Within the past decade you seen a rise of K-pop and Kdrama becoming popular all over the world. On Netflix Kdrama are taking the world by storm. South Korea most popular show is of course Squid Game as show originated from South Korea, this show charted 10 weeks in the number 1 top 10 Netflix list and been cumulatively in the top 10 list for 19 weeks. Another interesting fact is some of these Korean based shows on this list charted so well all over the world.
  
-Three of South Korea most popular top list program appear on the global top 10 list as well. Such as Squid Game, Kpop Demon Hunters and Extraordinary Attorney Woo; which are shows that were made for both South Korean and international fanbases. This shows that South Korea is becoming a main player in the world entertainment media.  
+Three of South Korea most popular top list program appear on the global top 10 list as well. Such as Squid Game, Kpop Demon Hunters and Extraordinary Attorney Woo; which are shows that were made for both South Korean and international fanbases. Another interesting fact is that Squid Game globally charted 19 weeks in the number 1 spot on Netflix. This shows that South Korea is becoming a main player in the world entertainment media.  
 
 Published on `r Sys.Date()`
