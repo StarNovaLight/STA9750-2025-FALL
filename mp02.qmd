@@ -727,7 +727,7 @@ housing_growth_5_years
 
 
 
-### In this table the highest Housing  5 year Growth of the top 100 would be Salisbury, MD-DE Metro Area  and the lowest is Oshkosh-Neenah, WI Metro Area
+### In this table the highest Housing  5 year Growth of the top 100 would be Salisbury, MD-DE Metro Area  and the lowest is Oshkosh-Neenah, WI Metro Area.
 
 ```{r}
 housing_growth_5_years<-population_permits|>
@@ -766,7 +766,7 @@ housing_growth_mean<-housing_growth_5_years|>
 housing_growth_mean
 ```
 
-### Overall within my metric I say the value thats has the highest cummulative mean growth is Elizabethtown, KY Metro Area.
+### Overall within my metric I say the value that has the highest cummulative mean growth is Elizabethtown, KY Metro Area.
 
 # More Visualizations
 ```{r}
@@ -803,7 +803,7 @@ ggplot(rent_to_income_ratio_difference,
 housing_growth_mean<-housing_growth_5_years|>
   group_by(CBSA,Name,Year)|>
   summarize(total_growth_ratio=`Housing Yearly Growth`/`Housing 5 Year Growth`)|>
-  mutate(cum_mean_total_growth=cummean(total_growth_ratio))|>
+  mutate(cum_mean_total_growth=cummean(total_growth_ratio)*100,)|>
   ungroup()|>
   slice_max(cum_mean_total_growth, n=100)
 
@@ -844,7 +844,8 @@ ggplot(housing_growth_mean,
    theme(legend.position="bottom")
 ```
 
-### The CBSA'S that are the most YIMBY's are San Germán R Metro Area due to  the decrease of the rent burden as it was relatively high in the earlier years. Also Provo-Orem, UT Metro Area for the rapid housing growth and Oshkosh-Neenah, WI Metro Area for being above average.
+### The CBSA'S that are the most YIMBY's are San Germán R Metro Area due to the decrease of the rent burden as it was relatively high in the earlier years. Also, Provo-Orem, UT Metro Area for the rapid housing growth and Oshkosh-Neenah, WI Metro Area for being above average.
+
 ```{r}
 affordable_housing<-inner_join(population_wage_permits,RENT,join_by(NAME==NAME,YEAR==year))
 ```
@@ -946,15 +947,15 @@ rent_to_income_ratio_difference_Austin
 
 # Policy Brief-
 
-Hello John and Patrick Collison (founders of Stripe) and Jeremy Stoppelman. Thank you for taking time out of your day and joining us to discuss the housing crisis that's taking over our country.  Everyone here is avid supporters of the YIMBY, and all want to see more affordable housings for many employees in the essential jobs that keep our great cities running.
+Hello John and Patrick Collison (founders of Stripe) and Jeremy Stoppelman. Thank you for taking time out of your day and joining us to discuss the housing crisis that's taking over our country.  Everyone here is avid supporters of YIMBY, and all want to see more affordable housings for many employees in the essential jobs that keeps our great cities running.
 
-The two most important Occupation groups are health care and social services (NAICS 621). occupation that are essential for the fact they save lives every day and every city require them for the citizens to get the healthcare they need. Another occupation group is construction (NAICS 2362) more specifically for businesses. They in charge of building these buildings and making sure they are safe for businesses to occupy. Both groups are the cornerstone for every city on this data. I want to create more affordable housings for both groups.
+The two most important Occupation groups are Health Care and Social Assistance (NAICS 621) occupation that are essential for the fact they save lives every day and every city require them for the citizens to get the healthcare they need such as office workers in dentist or medical care offices, rehab centers, home health services, etc. Another occupation group is Construction (NAICS 2362) more specifically for businesses. They in charge of building these buildings and making sure they are safe for businesses to occupy. Both groups are the cornerstone for every city on this data. The healthcare providers take care of the everyday people, yet must stress about the living cost, while they saving other lives doesn't seem right. Also, construction workers are the ones constructing these buildings to be used by these big businesses, especially in New York where they must work on skyscrapers putting their lives at risk, to create a safe environment for people to work, yet they have a large portion of rent burden to face. This is why I want to create more affordable housings for both groups.
 
-For example, the rent to wages ratio is especially high for Punta Gorda, FL Metro Area when the employees are construction workers. as half of their salary goes for paying their monthly rent. This is happening in Florida a major state in one of the main Cities, and these essential workers are in desperate need for affordable housings. In major cities this seems to be the trend.
+For example, the rent to wages ratio is especially high in Punta Gorda, FL Metro Area when the employees are construction workers, as half of their salary goes for paying their monthly rent in 2012. This is happening in Florida in one of the main cities, and these essential workers are in desperate need for affordable housings. In major cities this seems to be the trend.
 
-Another thing to consider is the rent burden as for example the place that has the highest rent burden during 2023 was Cape Coral in Florida, with a rent burden of 30.14%. A YIMBY city such as Austin Texas where the rent burden was 20.39% the highest it ever been there the same year.  Which is extremely costly when considering these are workers that the cities depend on to function. Another thing to consider is the housing growth in YIMBY cities like Santa Rosa that experience a 5-year housing growth mean of 196.98. This means that the population and households are rapidly growing, and rent is becoming more expensive over time. 
+Another thing to consider is the rent burden as for example the place that has the highest rent burden during 2023 was Cape Coral in Florida, with a rent burden of 30.14% for the Health and Social Assistance employees. A YIMBY city such as Austin Texas where the rent burden was 20.39% the highest it ever been there the same year.  Which is extremely costly when considering these are workers that the cities depend on to function. Another thing to consider is the housing growth in YIMBY cities like Santa Rosa that experience a 5-year housing growth cumulative mean of 0.99 in 2018. This means that the population and households are rapidly growing, and rent is becoming more expensive over time.  
 
-This is why we need to incorporate these policies to give more affordable housing to the Health and Social Services workers and the Construction workers, since they are essentially the quiet MVP's that keep all these cities running. They are proving us safe living and good health, the least we could do is alleviate that heavy burden and provide them with affordable housing.
+This is why we need to incorporate these policies to give more affordable housing to the Health and Social Services workers and the Construction workers, since they are essentially the quiet MVP's that keep all these cities running. They are providing us safe  environments and good health, the least we could do is alleviate that heavy burden and provide them with affordable housing.
 
 
 
