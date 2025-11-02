@@ -511,7 +511,7 @@ ggplot(household_evolution,
     y='Households',
     color='CBSA'
   )+
-   scale_y_continuous(labels=function(y) y/100000) + 
+   scale_y_continuous(labels=function(y) y/1000000) + 
   theme_dark()+
    theme(legend.position="bottom")
 
@@ -639,7 +639,7 @@ rent_to_income_ratio_difference
 
 ```
  
-### Within the top 100 bracket the Metro Areea that had the highest Rent Burden was Mayaguez in 2018, and the one  with the lowest was Key West-Key Largo
+### Within the top 100 bracket the Metro Areea that had the highest Rent Burden was Mayaguez in 2018, and the one  with the lowest was Key West-Key Largo in 2023.
 ```{r}
 rent_income_population_permits<-inner_join(PERMITS,rent_income_population,join_by(CBSA==GEOID,
                                                                                   year==year))
@@ -765,7 +765,7 @@ housing_growth_mean<-housing_growth_5_years|>
 housing_growth_mean
 ```
 
-### Overall within my metric I say the value thats  have the highest cummulative mean growth is  Elizabethtown, KY Metro Area.
+### Overall within my metric I say the value thats has the highest cummulative mean growth is Elizabethtown, KY Metro Area.
 
 # More Visualizations
 ```{r}
