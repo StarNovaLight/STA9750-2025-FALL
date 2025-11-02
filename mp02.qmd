@@ -807,6 +807,8 @@ housing_growth_mean<-housing_growth_5_years|>
   ungroup()|>
   slice_max(cum_mean_total_growth, n=100)
 
+housing_growth_mean
+
 ```
 
 ```{r}
@@ -842,8 +844,7 @@ ggplot(housing_growth_mean,
    theme(legend.position="bottom")
 ```
 
-### the  CBSA'S that are the most YIMBY's are San Germán, PR Metro Area and Provo-Orem, UT Metro Area
-
+### The CBSA'S that are the most YIMBY's are San Germán R Metro Area due to  the decrease of the rent burden as it was relatively high in the earlier years. Also Provo-Orem, UT Metro Area for the rapid housing growth and Oshkosh-Neenah, WI Metro Area for being above average.
 ```{r}
 affordable_housing<-inner_join(population_wage_permits,RENT,join_by(NAME==NAME,YEAR==year))
 ```
