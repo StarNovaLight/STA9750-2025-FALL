@@ -387,7 +387,7 @@ Finance_New_York<-population_wage_permits|>
 
 Finance_New_York
 ```
-### In [`r Finance_New_York$Year`]{style='color:cyan;'} [`r Finance_New_York$NAME`]{style='color:cyan;'}  wages peak in the Finance and Insurance to $[`r Finance_New_York$highest_wages`]{style='color:cyan;'}.
+### In [`r Finance_New_York$Year`]{style='color:cyan;'} [`r Finance_New_York$NAME`]{style='color:cyan;'} wages peak in the Finance and Insurance to $[`r Finance_New_York$highest_wages`]{style='color:cyan;'}.
 
 
 # Initial Visualizations
