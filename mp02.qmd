@@ -371,7 +371,7 @@ data_employment<- population_wage_permits|>
 data_employment
   
 ```
-### The last time that New York had the most Data Scientist employment was in 2015
+### The last time that New York had the most Data Scientist employment was in 2015.
 ```{r}
 industry_wages<-inner_join(INDUSTRY_CODES, WAGE, join_by(level1_code == INDUSTRY))
 population_industry_wages<-inner_join(industry_wages,POPULATION, join_by(CBSA==GEOID,YEAR==year))
@@ -387,7 +387,8 @@ Finance_New_York<-population_wage_permits|>
 
 Finance_New_York
 ```
-### In [`r Finance_New_York$Year`]{style='color:cyan;'} [`r Finance_New_York$NAME`]{style='color:cyan;'}  wages peark in the Finance and 
+### In [`r Finance_New_York$Year`]{style='color:cyan;'} [`r Finance_New_York$NAME`]{style='color:cyan;'}  wages peak in the Finance and Insurance to $[`r Finance_New_York$highest_wages`]{style='color:cyan;'}.
+
 
 # Initial Visualizations
 
