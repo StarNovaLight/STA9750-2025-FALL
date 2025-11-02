@@ -1,0 +1,957 @@
+---
+title: "Mini Project 2"
+author: 'Starlette John'
+format:
+  html:
+    theme: vapor 
+    code-fold: true
+    code-summary: "Show the code"
+
+---
+<style>
+pre {
+  color: cyan
+}
+</style>
+
+
+```{r}
+
+if(!dir.exists(file.path("data", "mp02"))){
+    dir.create(file.path("data", "mp02"), showWarnings=FALSE, recursive=TRUE)
+}
+
+ensure_package <- function(pkg){
+    pkg <- as.character(substitute(pkg))
+    options(repos = c(CRAN = "https://cloud.r-project.org"))
+    if(!require(pkg, character.only=TRUE, quietly=TRUE)) install.packages(pkg)
+    stopifnot(require(pkg, character.only=TRUE, quietly=TRUE))
+}
+
+ensure_package(tidyverse)
+ensure_package(glue)
+ensure_package(readxl)
+ensure_package(tidycensus)
+
+get_acs_all_years <- function(variable, geography="cbsa",
+                              start_year=2009, end_year=2023){
+    fname <- glue("{variable}_{geography}_{start_year}_{end_year}.csv")
+    fname <- file.path("data", "mp02", fname)
+    
+    if(!file.exists(fname)){
+        YEARS <- seq(start_year, end_year)
+        YEARS <- YEARS[YEARS != 2020] # Drop 2020 - No survey (covid)
+        
+        ALL_DATA <- map(YEARS, function(yy){
+            tidycensus::get_acs(geography, variable, year=yy, survey="acs1") |>
+                mutate(year=yy) |>
+                select(-moe, -variable) |>
+                rename(!!variable := estimate)
+        }) |> bind_rows()
+        
+        write_csv(ALL_DATA, fname)
+    }
+    
+    read_csv(fname, show_col_types=FALSE)
+}
+
+# Household income (12 month)
+INCOME <- get_acs_all_years("B19013_001") |>
+    rename(household_income = B19013_001)
+
+# Monthly rent
+RENT <- get_acs_all_years("B25064_001") |>
+    rename(monthly_rent = B25064_001)
+
+# Total population
+POPULATION <- get_acs_all_years("B01003_001") |>
+    rename(population = B01003_001)
+
+# Total number of households
+HOUSEHOLDS <- get_acs_all_years("B11001_001") |>
+    rename(households = B11001_001)
+
+```
+
+
+
+```{r}
+
+get_building_permits <- function(start_year = 2009, end_year = 2023){
+    fname <- glue("housing_units_{start_year}_{end_year}.csv")
+    fname <- file.path("data", "mp02", fname)
+    
+    if(!file.exists(fname)){
+        HISTORICAL_YEARS <- seq(start_year, 2018)
+        
+        HISTORICAL_DATA <- map(HISTORICAL_YEARS, function(yy){
+            historical_url <- glue("https://www.census.gov/construction/bps/txt/tb3u{yy}.txt")
+                
+            LINES <- readLines(historical_url)[-c(1:11)]
+
+            CBSA_LINES <- str_detect(LINES, "^[[:digit:]]")
+            CBSA <- as.integer(str_sub(LINES[CBSA_LINES], 5, 10))
+
+            PERMIT_LINES <- str_detect(str_sub(LINES, 48, 53), "[[:digit:]]")
+            PERMITS <- as.integer(str_sub(LINES[PERMIT_LINES], 48, 53))
+            
+            data_frame(CBSA = CBSA,
+                       new_housing_units_permitted = PERMITS, 
+                       year = yy)
+        }) |> bind_rows()
+        
+        CURRENT_YEARS <- seq(2019, end_year)
+        
+        CURRENT_DATA <- map(CURRENT_YEARS, function(yy){
+            current_url <- glue("https://www.census.gov/construction/bps/xls/msaannual_{yy}99.xls")
+            
+            temp <- tempfile()
+            
+            download.file(current_url, destfile = temp, mode="wb")
+            
+            fallback <- function(.f1, .f2){
+                function(...){
+                    tryCatch(.f1(...), 
+                             error=function(e) .f2(...))
+                }
+            }
+            
+            reader <- fallback(read_xlsx, read_xls)
+            
+            reader(temp, skip=5) |>
+                na.omit() |>
+                select(CBSA, Total) |>
+                mutate(year = yy) |>
+                rename(new_housing_units_permitted = Total)
+        }) |> bind_rows()
+        
+        ALL_DATA <- rbind(HISTORICAL_DATA, CURRENT_DATA)
+        
+        write_csv(ALL_DATA, fname)
+        
+    }
+    
+    read_csv(fname, show_col_types=FALSE)
+}
+
+PERMITS <- get_building_permits()
+
+```
+
+```{r}
+ensure_package(httr2)
+ensure_package(rvest)
+get_bls_industry_codes <- function(){
+    fname <- fname <- file.path("data", "mp02", "bls_industry_codes.csv")
+    
+    if(!file.exists(fname)){
+    
+        resp <- request("https://www.bls.gov") |> 
+            req_url_path("cew", "classifications", "industry", "industry-titles.htm") |>
+            req_headers(`User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:143.0) Gecko/20100101 Firefox/143.0") |> 
+            req_error(is_error = \(resp) FALSE) |>
+            req_perform()
+        
+        resp_check_status(resp)
+        
+        naics_table <- resp_body_html(resp) |>
+            html_element("#naics_titles") |> 
+            html_table() |>
+            mutate(title = str_trim(str_remove(str_remove(`Industry Title`, Code), "NAICS"))) |>
+            select(-`Industry Title`) |>
+            mutate(depth = if_else(nchar(Code) <= 5, nchar(Code) - 1, NA)) |>
+            filter(!is.na(depth))
+        
+        naics_table <- naics_table |> 
+            filter(depth == 4) |> 
+            rename(level4_title=title) |> 
+            mutate(level1_code = str_sub(Code, end=2), 
+                   level2_code = str_sub(Code, end=3), 
+                   level3_code = str_sub(Code, end=4)) |>
+            left_join(naics_table, join_by(level1_code == Code)) |>
+            rename(level1_title=title) |>
+            left_join(naics_table, join_by(level2_code == Code)) |>
+            rename(level2_title=title) |>
+            left_join(naics_table, join_by(level3_code == Code)) |>
+            rename(level3_title=title) |>
+            select(-starts_with("depth")) |>
+            rename(level4_code = Code) |>
+            select(level1_title, level2_title, level3_title, level4_title, 
+                   level1_code,  level2_code,  level3_code,  level4_code)
+    
+        write_csv(naics_table, fname)
+    }
+    
+    read_csv(fname, show_col_types=FALSE)
+    
+}
+
+INDUSTRY_CODES <- get_bls_industry_codes()
+
+```
+
+
+```{r}
+ensure_package(httr2)
+ensure_package(rvest)
+get_bls_qcew_annual_averages <- function(start_year=2009, end_year=2023){
+    fname <- glue("bls_qcew_{start_year}_{end_year}.csv.gz")
+    fname <- file.path("data", "mp02", fname)
+    
+    YEARS <- seq(start_year, end_year)
+    YEARS <- YEARS[YEARS != 2020] # Drop Covid year to match ACS
+    
+    if(!file.exists(fname)){
+        ALL_DATA <- map(YEARS, .progress=TRUE, possibly(function(yy){
+            fname_inner <- file.path("data", "mp02", glue("{yy}_qcew_annual_singlefile.zip"))
+            
+            if(!file.exists(fname_inner)){
+                request("https://www.bls.gov") |> 
+                    req_url_path("cew", "data", "files", yy, "csv",
+                                 glue("{yy}_annual_singlefile.zip")) |>
+                    req_headers(`User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:143.0) Gecko/20100101 Firefox/143.0") |> 
+                    req_retry(max_tries=5) |>
+                    req_perform(fname_inner)
+            }
+            
+            if(file.info(fname_inner)$size < 755e5){
+                warning(sQuote(fname_inner), "appears corrupted. Please delete and retry this step.")
+            }
+            
+            read_csv(fname_inner, 
+                     show_col_types=FALSE) |> 
+                mutate(YEAR = yy) |>
+                select(area_fips, 
+                       industry_code, 
+                       annual_avg_emplvl, 
+                       total_annual_wages, 
+                       YEAR) |>
+                filter(nchar(industry_code) <= 5, 
+                       str_starts(area_fips, "C")) |>
+                filter(str_detect(industry_code, "-", negate=TRUE)) |>
+                mutate(FIPS = area_fips, 
+                       INDUSTRY = as.integer(industry_code), 
+                       EMPLOYMENT = as.integer(annual_avg_emplvl), 
+                       TOTAL_WAGES = total_annual_wages) |>
+                select(-area_fips, 
+                       -industry_code, 
+                       -annual_avg_emplvl, 
+                       -total_annual_wages) |>
+                # 10 is a special value: "all industries" , so omit
+                filter(INDUSTRY != 10) |> 
+                mutate(AVG_WAGE = TOTAL_WAGES / EMPLOYMENT)
+        })) |> bind_rows()
+        
+        write_csv(ALL_DATA, fname)
+    }
+    
+    ALL_DATA <- read_csv(fname, show_col_types=FALSE)
+    
+    ALL_DATA_YEARS <- unique(ALL_DATA$YEAR)
+    
+    YEARS_DIFF <- setdiff(YEARS, ALL_DATA_YEARS)
+    
+    if(length(YEARS_DIFF) > 0){
+        stop("Download failed for the following years: ", YEARS_DIFF, 
+             ". Please delete intermediate files and try again.")
+    }
+    
+    ALL_DATA
+}
+
+WAGES <- get_bls_qcew_annual_averages()
+
+```
+# Data Exploration:
+
+
+
+```{r}
+glimpse(PERMITS)
+```
+```{r}
+location<-inner_join(PERMITS, INCOME, join_by(CBSA == GEOID,
+                                              year==year))
+```
+
+```{r}
+library(DT)
+location |> 
+  group_by(CBSA,NAME)|>
+  filter(year>=2010 & year<=2019)|>
+  summarize(total_units=sum(new_housing_units_permitted))|>
+  slice_max(total_units,n=1)|>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+library(stringr)
+format_titles <- function(df){
+    colnames(df) <- str_replace_all(colnames(df), "_", " ") |> str_to_title()
+    df
+}  
+```
+```{r}
+Highest_permits<-location |> 
+  group_by(NAME, CBSA)|>
+  filter(year>=2010 & year<=2019)|>
+  summarize(total_units=sum(new_housing_units_permitted))|>
+  ungroup()|>
+  slice_max(total_units,n=1)
+  
+Highest_permits
+  
+```
+
+### The CBSA that has the most housing units is [`r Highest_permits$NAME`]{style='color:cyan;'} and with a total of new housing units of [`r Highest_permits$total_units`]{style='color:cyan;'}
+
+
+
+
+
+
+```{r}
+NM_Housing<-location|>
+  group_by(year,NAME )|>
+  filter(CBSA=='10740')|> 
+  ungroup()|>
+  slice_max(new_housing_units_permitted,n=1)
+
+NM_Housing
+```
+### In [`r NM_Housing$year`]{style='color:cyan;'}  Albuquerque  reached it peak of new housing units of `r NM_Housing$new_housing_units_permitted`]{style='color:cyan;'}
+
+
+```{r}
+different_incomes<-inner_join(location, HOUSEHOLDS, join_by(CBSA == GEOID,
+                                                            NAME==NAME,
+                                                            year==year))
+
+```
+```{r}
+income_by_state<-inner_join(different_incomes, POPULATION, join_by(year == year,
+                                                    NAME==NAME))
+```
+
+```{r}
+highest_income_state<-income_by_state|> 
+  mutate(state = str_extract(NAME, ", (.{2})", group=1))|>
+  group_by(state,year)|>
+  filter(year==2015)|>
+  summarize(highest_income=(mean((household_income) *households))/population)|>
+  ungroup()|>
+  slice_max(highest_income, n=1)
+ 
+highest_income_state
+
+```
+
+### The state [`r highest_income_state$state`]{style='color:cyan;'} had the highest income of [`r highest_income_state$highest_income`]{style='color:cyan;'} in year [`r highest_income_state$year`]{style='color:cyan;'}.
+
+```{r}
+WAGE<-WAGES|> mutate(CBSA = as.double(paste0(str_remove(FIPS,'C'),0)))
+Wage_Permits<-inner_join(WAGE, PERMITS, join_by(CBSA==CBSA, YEAR==year))
+```
+
+```{r}
+population_wage_permits<-inner_join(Wage_Permits,POPULATION, join_by(CBSA==GEOID,YEAR==year))
+
+```
+
+```{r}
+data_employment<- population_wage_permits|>
+  group_by(YEAR,NAME)|>
+  filter(INDUSTRY=='5182')|>
+  summarize(most_data_scientist=max(EMPLOYMENT))|>
+  ungroup()|>
+  slice_max(most_data_scientist, n=15)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+
+
+
+data_employment
+  
+```
+### The last time that New York had the most Data Scientist employment was in 2015
+```{r}
+industry_wages<-inner_join(INDUSTRY_CODES, WAGE, join_by(level1_code == INDUSTRY))
+population_industry_wages<-inner_join(industry_wages,POPULATION, join_by(CBSA==GEOID,YEAR==year))
+```
+
+```{r}
+Finance_New_York<-population_wage_permits|>
+  group_by(INDUSTRY,YEAR,NAME)|>
+  filter(INDUSTRY=='52',CBSA=='35620')|>
+  summarize(highest_wages=max(sum(TOTAL_WAGES)/sum(EMPLOYMENT)))|>
+  ungroup()|>
+  slice_max(highest_wages,n=1)
+
+Finance_New_York
+```
+### In [`r Finance_New_York$Year`]{style='color:cyan;'} [`r Finance_New_York$NAME`]{style='color:cyan;'}  wages peark in the Finance and 
+
+# Initial Visualizations
+
+
+```{r}
+rent_income<-inner_join(INCOME,RENT,join_by(GEOID==GEOID,
+                                            year==year,
+                                            NAME==NAME))
+```
+
+
+```{r}
+rent_income1<-inner_join(PERMITS,rent_income, join_by(CBSA==GEOID,
+                                                    year==year))
+  
+```
+
+```{r}
+rent_2009 <-rent_income1|>
+  group_by(CBSA)|>
+  filter(year==2009)|>
+  summarize(household_income,monthly_rent,year)
+
+ 
+  
+ 
+  
+
+
+rent_2009
+```
+
+```{r}
+
+library(ggplot2)
+ggplot(rent_2009, aes(x=monthly_rent, y=household_income)) + 
+    # Make points slightly transparent so plot is less busy
+    geom_point(alpha=0.3,color='purple') + 
+    xlab("Monthly Rent") + 
+    ylab("Household Income") + 
+    labs(title="Household Income based on Monthly Rent", 
+         caption="Data from the ggplot2 R package.") + 
+    stat_smooth(se=FALSE, 
+                color="darkturquoise") +
+    scale_x_continuous(labels=scales::dollar) +
+    scale_y_continuous(labels=scales::dollar) + 
+    theme_bw()+
+  guides(color=guide_legend(override.aes=list(alpha=1)))
+
+```
+
+
+second visual
+```{r}
+health_and_social_employment_top_100<-population_industry_wages|>
+  group_by(YEAR, NAME,CBSA)|>
+  filter(level1_code=='62')|>
+  summarize(total_employment=sum(EMPLOYMENT))|>
+  ungroup()|>
+  slice_max(total_employment,n=100)
+  
+
+health_and_social_employment_top_100
+```
+
+```{r}
+
+
+
+
+ggplot(health_and_social_employment_top_100,
+       aes(x=YEAR,y=total_employment))+
+  geom_line(aes(color=NAME))+
+  labs(
+    title='Employment of Health and Social Services Industry in the Top 100.',
+    x='Year',
+    y='Total Employment in the Millions',
+    color='CBSA'
+  )+
+  scale_y_continuous(labels=function(y) y/1000000) + 
+  theme_dark() +
+  theme(legend.position="bottom")
+
+ 
+```
+
+```{r}
+households_time<-inner_join(PERMITS,HOUSEHOLDS,join_by(CBSA==GEOID,
+                                                       year==year))
+```
+
+
+```{r}
+
+household_evolution_top_50<- households_time|>
+  group_by(CBSA,year,NAME)|>
+  summarize(average_households=(households))|>
+  ungroup()|>
+  slice_max(average_households, n=50)
+
+
+household_evolution_bottom_50<- households_time|>
+  group_by(CBSA,year,NAME)|>
+  summarize(average_households=(households))|>
+  ungroup()|>
+  slice_min(average_households, n=50)
+
+household_evolution<-bind_rows(household_evolution_top_50,household_evolution_bottom_50)
+
+household_evolution
+```
+Third visual
+```{r}
+library(ggplot2)
+ggplot(household_evolution,
+       aes(x=year,y=average_households))+
+  geom_line(aes(color=NAME))+
+  labs(
+    title='Evolution of Households in the Millions',
+    x='Year',
+    y='Households',
+    color='CBSA'
+  )+
+   scale_y_continuous(labels=function(y) y/100000) + 
+  theme_dark()+
+   theme(legend.position="bottom")
+
+ 
+```
+
+
+
+
+
+
+
+# More Exploration
+
+```{r}
+rent_income_population<-inner_join(POPULATION,rent_income, join_by(GEOID==GEOID,
+                                                                   NAME==NAME,
+                                                                   year==year))
+  
+  
+```
+
+```{r}
+rent_to_income_ratio<-rent_income_population|>
+  group_by(year,NAME)|>
+  summarize(rent_burden=mean(monthly_rent/(household_income/12)),
+  n_delayed = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+  slice_max(rent_burden,n=100)|>
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(
+            Year=year,
+            `Name`=NAME,
+           `Percent Rent Burden` = round(rent_burden * 100, 2), 
+           `Ranking` = Rent_Burden_Rank) |>
+    select(Ranking, `Percent Rent Burden`, Year, Name)
+
+  
+
+  
+rent_to_income_ratio
+   
+```
+
+
+
+
+```{r}
+rent_to_income_ratio_difference<-rent_income_population|>
+  group_by(year,NAME)|>
+  summarize(rent_burden=mean(monthly_rent/(household_income/12)),
+  n_delayed = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+  slice_max(rent_burden,n=100)|>
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(Difference=round(c(NA,diff(rent_burden))*100,2))|>
+    mutate(
+            Year=year,
+            `Name`=NAME,
+           `Percent Rent Burden` = round(rent_burden * 100, 2), 
+           `Ranking` = Rent_Burden_Rank) |>
+    select(Ranking, `Percent Rent Burden`, Difference,  Year, Name)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+
+  
+
+  
+rent_to_income_ratio_difference
+```
+
+
+
+```{r}
+rent_to_income_ratio_difference_San_German<-rent_income_population|>
+  group_by(year,NAME)|>
+  filter( year >=2009 & year <= 2023, NAME=='San Germán, PR Metro Area')|>
+  summarize(rent_burden=(monthly_rent/(household_income/12)),
+  n_delayed = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(Difference=round(c(NA,diff(rent_burden))*100,2))|>
+    mutate(
+            Year=year,
+            `Name`=NAME,
+           `Percent Rent Burden` = round(rent_burden * 100, 2), 
+           `Ranking` = Rent_Burden_Rank) |>
+    select(Ranking, `Percent Rent Burden`, Difference,  Year, Name)|>
+   format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+ 
+
+rent_to_income_ratio_difference_San_German
+```
+
+
+```{r}
+rent_to_income_ratio_difference<-rent_income_population|>
+  group_by(year,NAME)|>
+  summarize(rent_burden=mean(monthly_rent/(household_income/12)),
+  rent_burden_number = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+  slice_max(rent_burden,n=100)|>
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(Difference=round(c(NA,diff(rent_burden))*100,2))|>
+    mutate(
+            Year=year,
+            `Name`=NAME,
+           `Percent Rent Burden` = round(rent_burden * 100, 2), 
+            `Rent Burden`=rent_burden_number,
+           `Ranking` = Rent_Burden_Rank) |>
+    select(Ranking, `Percent Rent Burden`,  Year, Name)|>
+   format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+ 
+
+  
+
+  
+rent_to_income_ratio_difference
+
+```
+ 
+### Within the top 100 bracket the Metro Areea that had the highest Rent Burden was Mayaguez in 2018, and the one  with the lowest was Key West-Key Largo
+```{r}
+rent_income_population_permits<-inner_join(PERMITS,rent_income_population,join_by(CBSA==GEOID,
+                                                                                  year==year))
+```
+
+
+```{r}
+
+
+```
+
+```{r}
+population_permits<-inner_join(PERMITS,POPULATION, join_by(CBSA==GEOID,
+                                                           year==year))
+
+```
+
+```{r}
+housing_growth_yearly<-population_permits|>
+  group_by(CBSA)|>
+  select(year,CBSA,population,new_housing_units_permitted,NAME)|>
+  mutate(growth_5_years=(population-lag(population,5)))|>
+  mutate(growth_5_years=(population-lag(population,5))/lag(population,5)*100)|>
+   mutate(growth_housing_units=(new_housing_units_permitted-lag(new_housing_units_permitted)))|>
+  mutate(house_growth_to_population_rate=(growth_housing_units/population)*100,2)|>
+   summarize(NAME,growth_5_year_population=growth_5_years,population,growth_housing_units,housing_units=new_housing_units_permitted,year,house_growth_to_population_rate)|>
+    ungroup()|>
+  slice_max(house_growth_to_population_rate,n=100)|>
+  mutate(Housing_Growth_Rank = dense_rank((house_growth_to_population_rate))) |>
+  mutate(Difference=round(c(NA,diff(house_growth_to_population_rate))*100,2))|>
+  mutate(
+            Year=year,
+            `Name`=NAME,
+           `Housing Yearly Growth` =house_growth_to_population_rate, 
+           `Ranking` =Housing_Growth_Rank ) |>
+    select(Ranking,`Housing Yearly Growth` , Difference,  Year, Name, CBSA)|>
+    format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+
+  
+
+housing_growth_yearly
+  
+
+
+
+```
+
+### In this table the highest Housing Yearly Growth of the top 100 is Punta Gorda, FL Metro Area and the lowest is Hilton Head Island-Bluffton, SC Metro Area
+
+```{r}
+
+
+housing_growth_5_years<-population_permits|>
+  group_by(CBSA)|>
+  select(year,CBSA,population,new_housing_units_permitted,NAME)|>
+  mutate(growth_5_years=(population-lag(population,5)))|>
+  mutate(growth_5_years=(population-lag(population,5))/lag(population,5)*100)|>
+   mutate(growth_housing_units=(new_housing_units_permitted-lag(new_housing_units_permitted)))|>
+  mutate(house_growth_to_population_rate=(growth_housing_units/population)*100)|>
+   mutate(house_growth_to_population_5_years_rate=(growth_housing_units/lag(population,5)*100))|>
+   summarize(NAME,growth_5_year_population=growth_5_years,population,growth_housing_units,housing_units=new_housing_units_permitted,year,house_growth_to_population_rate,house_growth_to_population_5_years_rate)|>
+    ungroup()|>
+  slice_max(house_growth_to_population_5_years_rate,n=100)|>
+  mutate(Housing_Growth_5_Year_Rank = dense_rank((house_growth_to_population_5_years_rate))) |>
+  mutate(Difference=round(c(NA,diff(house_growth_to_population_rate))*100,2))|>
+  mutate(
+            Year=year,
+            `Name`=NAME,
+           `Housing Yearly Growth` =house_growth_to_population_rate, 
+           `Housing 5 Year Growth`=house_growth_to_population_5_years_rate,
+           `Ranking` =Housing_Growth_5_Year_Rank) |>
+ format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+ 
+  
+
+
+housing_growth_5_years
+```
+
+
+
+
+### In this table the highest Housing  5 year Growth of the top 100 would be Salisbury, MD-DE Metro Area  and the lowest is Oshkosh-Neenah, WI Metro Area
+
+```{r}
+housing_growth_5_years<-population_permits|>
+  group_by(CBSA)|>
+  select(year,CBSA,population,new_housing_units_permitted,NAME)|>
+  mutate(growth_5_years=(population-lag(population,5)))|>
+  mutate(growth_5_years=(population-lag(population,5))/lag(population,5)*100)|>
+   mutate(growth_housing_units=(new_housing_units_permitted-lag(new_housing_units_permitted)))|>
+  mutate(house_growth_to_population_rate=(growth_housing_units/population)*100)|>
+   mutate(house_growth_to_population_5_years_rate=(growth_housing_units/lag(population,5)*100))|>
+   summarize(NAME,growth_5_year_population=growth_5_years,population,growth_housing_units,housing_units=new_housing_units_permitted,year,house_growth_to_population_rate,house_growth_to_population_5_years_rate)|>
+    ungroup()|>
+  slice_max(house_growth_to_population_5_years_rate,n=100)|>
+  mutate(Housing_Growth_5_Year_Rank = dense_rank((house_growth_to_population_5_years_rate))) |>
+  mutate(Difference=round(c(NA,diff(house_growth_to_population_rate))*100,2))|>
+  mutate(
+            Year=year,
+            `Name`=NAME,
+           `Housing Yearly Growth` =house_growth_to_population_rate, 
+           `Housing 5 Year Growth`=house_growth_to_population_5_years_rate,
+           `Ranking` =Housing_Growth_5_Year_Rank) 
+
+```
+
+```{r}
+housing_growth_mean<-housing_growth_5_years|>
+  group_by(CBSA,Name,Year)|>
+  summarize(total_growth_ratio=`Housing Yearly Growth`/`Housing 5 Year Growth`)|>
+  mutate(cum_mean_total_growth=cummean(total_growth_ratio))|>
+  ungroup()|>
+  slice_max(cum_mean_total_growth, n=100)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+
+housing_growth_mean
+```
+
+### Overall within my metric I say the value thats  have the highest cummulative mean growth is  Elizabethtown, KY Metro Area.
+
+# More Visualizations
+```{r}
+rent_to_income_ratio_difference<-rent_income_population|>
+  group_by(year,NAME)|>
+  summarize(rent_burden=mean(monthly_rent/(household_income/12)*100,2),
+  rent_burden_number = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+  slice_max(rent_burden,n=100)|>
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(Difference=round(c(NA,diff(rent_burden))*100,2))
+
+rent_to_income_ratio_difference
+```
+
+
+
+```{r}
+ggplot(rent_to_income_ratio_difference,
+       aes(x=year,y= rent_burden))+
+  geom_line(aes(color=NAME))+
+  labs(
+    title='Evolution of Households in the Millions',
+    x='Year',
+    y=' Rent Burden %'
+  )+
+  theme_dark()+
+   theme(legend.position="bottom")
+```
+  
+
+```{r}
+housing_growth_mean<-housing_growth_5_years|>
+  group_by(CBSA,Name,Year)|>
+  summarize(total_growth_ratio=`Housing Yearly Growth`/`Housing 5 Year Growth`)|>
+  mutate(cum_mean_total_growth=cummean(total_growth_ratio))|>
+  ungroup()|>
+  slice_max(cum_mean_total_growth, n=100)
+
+```
+
+```{r}
+install.packages("gghighlight")
+library(gghighlight)
+```
+
+```{r}
+ggplot(housing_growth_mean,
+       aes(x=Year,y= cum_mean_total_growth))+
+  geom_line(aes(color=Name))+
+  labs(
+    title='Evolution of Households in the Millions',
+    x='Year',
+    y=' Cummulative Mean of Total Growth %'
+  )+
+  theme_dark()+
+   theme(legend.position="none")
+ 
+  
+```
+
+```{r}
+ggplot(housing_growth_mean,
+       aes(x=Year,y= cum_mean_total_growth))+
+  geom_line(aes(color=Name))+
+  labs(
+    title='Evolution of Households in the Millions',
+    x='Year',
+    y=' Cummulative Mean of Total Growth %'
+  )+
+  theme_dark()+
+   theme(legend.position="bottom")
+```
+
+### the  CBSA'S that are the most YIMBY's are San Germán, PR Metro Area and Provo-Orem, UT Metro Area
+
+```{r}
+affordable_housing<-inner_join(population_wage_permits,RENT,join_by(NAME==NAME,YEAR==year))
+```
+
+
+```{r}
+Policy_brief<-affordable_housing|>
+  group_by(CBSA,NAME,YEAR, INDUSTRY)|>
+  filter(INDUSTRY=='621'| INDUSTRY=='2362')|>
+  summarize(avg_rent_wages_ratio=max(monthly_rent/(AVG_WAGE/12)))|>
+  ungroup()|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+ 
+Policy_brief
+```
+```{r}
+Policy_brief_top_100<-affordable_housing|>
+  group_by(CBSA,NAME,YEAR, INDUSTRY)|>
+  filter(INDUSTRY=='621'| INDUSTRY=='2362')|>
+  summarize(avg_rent_wages_ratio=monthly_rent/(AVG_WAGE/12))|>
+  ungroup()|>
+  slice_max(avg_rent_wages_ratio,n=100)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+
+Policy_brief_top_100
+
+
+```
+
+
+```{r}
+rent_to_income_ratio_difference<-rent_income_population|>
+  group_by(year,NAME)|>
+  summarize(rent_burden=mean(monthly_rent/(household_income/12)),
+  rent_burden_number = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+  slice_max(rent_burden,n=100)|>
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(Difference=round(c(NA,diff(rent_burden))*100,2))|>
+    mutate(
+            Year=year,
+            `Name`=NAME,
+           `Percent Rent Burden` = round(rent_burden * 100, 2), 
+            `Rent Burden`=rent_burden_number,
+           `Ranking` = Rent_Burden_Rank) |>
+    select(Ranking, `Percent Rent Burden`,  Year, Name)
+
+rent_to_income_ratio_difference
+
+```
+
+```{r}
+Policy_brief<-affordable_housing|>
+  group_by(CBSA,NAME,YEAR, INDUSTRY)|>
+  filter(INDUSTRY=='621'| INDUSTRY=='2362')|>
+  summarize(avg_rent_wages_ratio=max(monthly_rent/(AVG_WAGE/12)))|>
+  ungroup()
+```
+
+```{r}
+
+rent_burden_policy<-inner_join(rent_to_income_ratio_difference,Policy_brief, join_by(Name==NAME,Year==YEAR))
+
+rent_burden_policy|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+  
+```
+```{r}
+rent_to_income_ratio_difference_Austin<-rent_income_population|>
+  group_by(year,NAME)|>
+  filter( year >=2009 & year <= 2023, NAME=='Austin-Round Rock, TX Metro Area')|>
+  summarize(rent_burden=(monthly_rent/(household_income/12)),
+  n_delayed = sum(monthly_rent/(household_income/12)), 
+              n_total = n()) |> 
+  ungroup()|> 
+    mutate(Rent_Burden_Rank = dense_rank((rent_burden))) |>
+    mutate(Difference=round(c(NA,diff(rent_burden))*100,2))|>
+    mutate(
+            Year=year,
+            `Name`=NAME,
+           `Percent Rent Burden` = round(rent_burden * 100, 2), 
+           `Ranking` = Rent_Burden_Rank) |>
+    select(Ranking, `Percent Rent Burden`, Difference,  Year, Name)|>
+   format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE)) 
+ 
+
+rent_to_income_ratio_difference_Austin
+```
+
+
+
+# Policy Brief-
+
+Hello John and Patrick Collison (founders of Stripe) and Jeremy Stoppelman. Thank you for taking time out of your day and joining us to discuss the housing crisis that's taking over our country.  Everyone here is avid supporters of the YIMBY, and all want to see more affordable housings for many employees in the essential jobs that keep our great cities running.
+
+The two most important Occupation groups are health care and social services (NAICS 621). occupation that are essential for the fact they save lives every day and every city require them for the citizens to get the healthcare they need. Another occupation group is construction (NAICS 2362) more specifically for businesses. They in charge of building these buildings and making sure they are safe for businesses to occupy. Both groups are the cornerstone for every city on this data. I want to create more affordable housings for both groups.
+
+For example, the rent to wages ratio is especially high for Punta Gorda, FL Metro Area when the employees are construction workers. as half of their salary goes for paying their monthly rent. This is happening in Florida a major state in one of the main Cities, and these essential workers are in desperate need for affordable housings. In major cities this seems to be the trend.
+
+Another thing to consider is the rent burden as for example the place that has the highest rent burden during 2023 was Cape Coral in Florida, with a rent burden of 30.14%. A YIMBY city such as Austin Texas where the rent burden was 20.39% the highest it ever been there the same year.  Which is extremely costly when considering these are workers that the cities depend on to function. Another thing to consider is the housing growth in YIMBY cities like Santa Rosa that experience a 5-year housing growth mean of 196.98. This means that the population and households are rapidly growing, and rent is becoming more expensive over time. 
+
+This is why we need to incorporate these policies to give more affordable housing to the Health and Social Services workers and the Construction workers, since they are essentially the quiet MVP's that keep all these cities running. They are proving us safe living and good health, the least we could do is alleviate that heavy burden and provide them with affordable housing.
+
+
+Published on `r Sys.Date()`
