@@ -317,7 +317,7 @@ NM_Housing<-location|>
 
 NM_Housing
 ```
-### In [`r NM_Housing$year`]{style='color:cyan;'}  Albuquerque  reached it peak of new housing units of `r NM_Housing$new_housing_units_permitted`]{style='color:cyan;'}
+### In [`r NM_Housing$year`]{style='color:cyan;'}  Albuquerque  reached it peak of new housing units of [`r NM_Housing$new_housing_units_permitted`]{style='color:cyan;'}
 
 
 ```{r}
@@ -938,6 +938,7 @@ rent_to_income_ratio_difference_Austin<-rent_income_population|>
 
 rent_to_income_ratio_difference_Austin
 ```
+
 
 
 
