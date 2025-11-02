@@ -954,4 +954,5 @@ Another thing to consider is the rent burden as for example the place that has t
 This is why we need to incorporate these policies to give more affordable housing to the Health and Social Services workers and the Construction workers, since they are essentially the quiet MVP's that keep all these cities running. They are proving us safe living and good health, the least we could do is alleviate that heavy burden and provide them with affordable housing.
 
 
+
 Published on `r Sys.Date()`
