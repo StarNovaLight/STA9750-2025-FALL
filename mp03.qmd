@@ -1,0 +1,354 @@
+---
+title: "mp03"
+author: 'Starlette John'
+format:
+  html:
+    theme: vapor 
+    code-fold: true
+    code-summary: "Show the code"
+
+
+---
+<style>
+pre {
+  color: cyan
+}
+</style>
+
+---
+#  Visualizing and Maintaining the Green Canopy of NYC
+
+## Downloading City Districts Data
+```{r}
+dir.create('data/mp03')
+
+```
+
+
+ 
+```{r}
+shoreline<-download.file('https://s-media.nyc.gov/agencies/dcp/assets/files/zip/data-tools/bytes/city-council/nycc_25c.zip',destfile='data/mp03/City Council (Clipped to Shoreline).zip')
+```
+
+```{r}
+unzip('data/mp03/City Council (Clipped to Shoreline).zip')
+nycc_25c<-sf::st_read('nycc_25c')
+    library(sf)
+ city_25c_1<-st_transform(nycc_25c, crs="WGS84")
+ 
+ city_25c_1
+```
+
+## Downloading NYC Trees Data
+```{r}
+
+#| cache: true
+get_nyc_trees_data <- function(){
+  fname <- file.path("data", "mp03", "nyc_trees.rds")
+  
+    if(!require("httr2")) install.packages("httr2")
+    library(httr2)
+
+    if(!require("jsonlite")) install.packages("jsonlite")
+    library(jsonlite)
+
+    if(!require("dplyr")) install.packages("dplyr")
+    library(dplyr)
+
+    if(!require("readr")) install.packages("readr")
+    library(readr)
+    
+    if(!require("tidyverse")) install.packages("tidyverse")
+    library(tidyverse)
+  if(!file.exists(fname)){
+  
+    ENDPOINT <- "https://data.cityofnewyork.us/resource/hn5i-inap.geojson"
+    
+    BATCH_SIZE <- 50000
+    OFFSET     <- 0
+    END_OF_EXPORT <- FALSE
+    ALL_DATA <- list()
+    while(!END_OF_EXPORT){
+        cat("Requesting items", OFFSET, "to", BATCH_SIZE + OFFSET, "\n")
+    
+        req <- request(ENDPOINT) |>
+          req_url_query(`$limit`  = BATCH_SIZE, 
+                        `$offset` = OFFSET)
+    
+        resp <- req_perform(req)
+    
+        batch_data <- st_read(resp_body_string(resp))
+    
+        ALL_DATA <- c(ALL_DATA, list(batch_data))
+    
+      if(NROW(batch_data) != BATCH_SIZE){
+            END_OF_EXPORT <- TRUE
+        
+           cat("End of Data Export Reached\n")
+       } else {
+           OFFSET <- OFFSET + BATCH_SIZE
+        }
+    }
+      ALL_DATA <- list_rbind(ALL_DATA)
+      cat("Data export complete:", NROW(ALL_DATA), "rows and", NCOL(ALL_DATA), "columns.")
+      write_rds(ALL_DATA,'data/mp03/nyc_trees.rds' )
+ }
+  read_rds('data/mp03/nyc_trees.rds')
+}
+nyc_trees<-get_nyc_trees_data()
+
+
+
+
+```
+
+## NYC Visual Mapping
+
+```{r}
+library(ggplot2)
+ggplot() +
+    geom_sf( data=city_25c_1, aes(geometry = geometry),   fill = "brown", color = "black") +
+    geom_sf( data=nyc_trees, aes(geometry = geometry),  fill=NA,  color = "green",size=1)+
+   labs(
+    title='NYC Tree Map'
+    )
+
+
+```
+
+## Data Exploration
+```{r}
+
+nyc_trees<-st_as_sf(nyc_trees)
+city_trees<-st_join(nyc_trees,city_25c_1,join=st_intersects)
+
+
+```
+
+```{r}
+#|cache: true
+
+max_trees<-city_trees|>
+    group_by(CounDist)|>
+    summarize(total_number_of_trees=max(sum(n_distinct(plantingspaceglobalid))))|>
+    ungroup()|>
+    slice_max(total_number_of_trees,n=1)
+
+max_trees
+```
+### County Disttrict  [`r max_trees$CounDist`]{style='color:cyan;'} have [`r max_trees$total_number_of_trees`]{style='color:cyan;'}.
+```{r}
+#|cache: true
+great_density<-city_trees|>
+    group_by(CounDist)|>
+    summarize(Great_Density=max(Shape_Area))|>
+    ungroup()|>
+    slice_max(Great_Density,n=1)
+
+great_density
+
+```
+
+### County district [`r great_density$CounDist`]{style='color:cyan;'} have  the highest density  of [`r great_density$Great_Density`]{style='color:cyan;'}.
+```{r}
+#|cache: true
+
+dead_trees<-city_trees|>
+    group_by(CounDist)|>
+    filter(tpcondition=='Dead')|>
+    summarize(Highest_Amount_Of_Dead_Trees=max(sum(n_distinct(plantingspaceglobalid))))|>
+    ungroup()|>
+    slice_max(Highest_Amount_Of_Dead_Trees,n=1)
+dead_trees
+```
+
+### County District [`r dead_trees$CounDist`]{style='color:cyan;'} have the highest number of dead trees which was  a total of  [`r dead_trees$Highest_Amount_Of_Dead_Trees`]{style='color:cyan;'}.
+```{r}
+
+NYC_trees<-city_trees%>%
+  mutate(
+    Borough=case_when(
+      CounDist>=49~"Staten Island",
+      CounDist>=33~"Brooklyn",
+      CounDist>=19~"Queens",
+      CounDist>=11~"Bronx",
+      CounDist>=1~"Manhattan"
+    )
+  )
+
+```
+
+```{r}
+#|cache: true
+Manhattan_Trees<-NYC_trees|>
+    group_by(genusspecies)|>
+    filter(Borough=="Manhattan")|>
+    summarize(top_genusspecies=max(sum(n_distinct(plantingspaceglobalid))))|>
+    ungroup()|>
+    slice_max(top_genusspecies,n=1)
+Manhattan_Trees
+```
+### The top genus species in Manhattan is  [`r Manhattan_Trees$genusspecies`]{style='color:cyan;'}.
+
+```{r}
+#|cache: true
+new_st_point <- function(lat, lon, ...){
+    # st_sfc expects x, y which flips the normal lat (N/S) + lon (W/E) ordering
+    st_sfc(point = st_point(c(lon, lat))) |>
+      st_set_crs("WGS84")
+}
+
+my_point<-new_st_point
+
+nearest_tree<-NYC_trees|> 
+  mutate(distance = st_distance(geometry,my_point( 40.74,-73.98)))|>
+  group_by(genusspecies)|>
+  ungroup()|>
+  slice_min(distance,n=1)
+  
+  
+  
+
+```
+### The top genus species in Manhattan is  [`r nearest_tree$genusspecies`]{style='color:cyan;'}.
+
+## Government Project Design
+
+### Looking into Queens Distircts
+
+
+
+
+```{r}
+
+
+library(DT)
+library(stringr)
+format_titles <- function(df){
+    colnames(df) <- str_replace_all(colnames(df), "_", " ") |> str_to_title()
+    df
+}  
+Queens_trees<-NYC_trees|>
+  as_tibble()|>
+  group_by(CounDist, genusspecies)|>
+  filter(Borough=="Queens" )|>
+  summarize(top_genusspecies=max(sum(n_distinct(plantingspaceglobalid))),avg_risk=mean(riskrating, na.rm=TRUE))|>
+  ungroup()|>
+  slice_max(top_genusspecies,n=20)|>
+  format_titles()|>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+Queens_trees
+
+
+```
+
+### Examining District 19  tree types
+
+```{r}
+
+#|cache: true
+district_19<-NYC_trees|>
+  group_by(genusspecies)|>
+  filter(CounDist=='19')|>
+  summarize(top_genusspecies=max(sum(n_distinct(plantingspaceglobalid))))|>
+  ungroup()|>
+  slice_max(top_genusspecies,n=20)|>
+  format_titles()|>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+district_19
+
+
+```
+```{r}
+#|cache: true
+
+distict_19_dead_trees<-NYC_trees|>
+  group_by(genusspecies,tpcondition)|>
+  filter( CounDist=='19' &tpcondition=='Dead')|>
+  summarize(top_genusspecies=max(sum(n_distinct(plantingspaceglobalid))))|>
+  ungroup()|>
+  slice_max(top_genusspecies,n=20)|>
+  format_titles()|>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+distict_19_dead_trees
+```
+### Cluster Bar Chart of the overall Top 20  Of Queens Districts Genusspecies
+
+```{r}
+#|cache: true
+
+Queens_trees<-NYC_trees|>
+  group_by(CounDist, genusspecies)|>
+  filter(Borough=="Queens" )|>
+  summarize(top_genusspecies=max(sum(n_distinct(plantingspaceglobalid))),avg_risk=mean(riskrating, na.rm=TRUE))|>
+  ungroup()|>
+  slice_max(top_genusspecies,n=20)
+```
+
+```{r}
+ggplot(Queens_trees, aes(x =CounDist , y =top_genusspecies, fill =genusspecies)) +
+  geom_bar(stat = "identity", position = "dodge") +
+   labs(
+    title='Top 20 Genus Species in Queens',
+    x='Conty District',
+    y='Total Genus Species',
+  )+
+  theme_minimal()
+
+
+```
+
+
+### Examing District 19 Map
+```{r}
+District_19<-NYC_trees%>%
+  filter(CounDist=='19')
+
+```
+
+```{r}
+ggplot() +
+    geom_sf( data=District_19, aes(geometry = geometry),   fill = "brown", color = 'green')+
+   labs(
+    title='District 19'
+  )
+```
+
+```{r}
+
+#|cache: true
+district_19<-NYC_trees|>
+  group_by(genusspecies)|>
+  filter(CounDist=='19')|>
+  summarize(top_genusspecies=max(sum(n_distinct(plantingspaceglobalid))))|>
+  ungroup()|>
+  slice_max(top_genusspecies,n=20)
+```
+
+```{r}
+ggplot(district_19, aes(x =genusspecies , y =top_genusspecies, fill =genusspecies)) +
+  geom_bar(stat = "identity", position = "dodge") +
+   labs(
+    title='Top 20 Genus Species in District 19',
+    x= 'Genus Species',
+    y='Total Genus Species',
+  )+
+  theme_minimal()
+
+```
+## District 19 Annual Gardening Project
+
+Hello to my Fellow City Council Members,
+Queens is one of the most diverse places in the world, as people from multiple cultures reside in this borough and can grow some fascinating plants in the right conditions. I took a chance to explore the most popular tree types in the county districts of Queens.  When looking at District 19, I found a fascinating tree type called 'Green leaf' Japanese flowering cherry. Compared to the other Districts that have similar genus species I wanted to learn about District 19 since it presented a unique genus species. This led to my growing interest to inspect District 19 tree types in more detail.
+
+District 19 or otherwise known as Northeast Queens have some interesting plants to observe. The type of plants I observed that grows the most in the area the London planetree, pin oak, Norway maple, Callery pear, ’Green leaf' Japanese flowering cherry to name a few. In the first Graphic it shows the Number of threes and their types that reside in Queens. In the second graphic above it showed only district 19 and the mapping of the trees in that specific area.
+
+Tree life is very important to our ecosystem as it provide the resource we need and give us oxygen to live. With the rise of greenhouse gases and fossil fuel polluting our air, we need to be focus on taking care of our environment for our health.   Trees also represent a certain cultural aspect of the people residing in that area and it important to keep alive and healthy for us to honor those people and not disregard their environment. We already live in a highly condense city when compared to most and its. Important to preserve the environment we must keep us alive and healthy.  It’s also to reserve the beauty that each of these unique trees bring to us, as the aesthetic of these trees could represent a certain unique aesthetic of the district.
+
+ To keep the tree healthy, I done some research to discover the tree types that have the most dead reported to understand the agricultural context and lifespan of the plants. I done this as in the third table above demonstrates the tree genus species   that have the deadest trees within District 19. The ones highest recorded dead so far are the Norway maple trees. However, I looked at the list with the top 20 so we could replace those trees immediately. And research more about the certain conditions these trees must be kept having a healthier and longer life span.
+ 
+Join us for our annual gardening project in district 19 where we could use your support and make our district natural beauty stand out.
+
