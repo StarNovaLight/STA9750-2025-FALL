@@ -136,7 +136,7 @@ max_trees<-city_trees|>
 
 max_trees
 ```
-### County Disttrict  [`r max_trees$CounDist`]{style='color:cyan;'} have [`r max_trees$total_number_of_trees`]{style='color:cyan;'}.
+### County Disttrict  [`r max_trees$CounDist`]{style='color:cyan;'} have the highest amount of trees which was  [`r max_trees$total_number_of_trees`]{style='color:cyan;'}.
 ```{r}
 #|cache: true
 great_density<-city_trees|>
@@ -209,7 +209,7 @@ nearest_tree<-NYC_trees|>
   
   
   
-
+nearest_tree
 ```
 ### The nearest tree to Baruch College is  [`r nearest_tree$genusspecies`]{style='color:cyan;'}.
 
