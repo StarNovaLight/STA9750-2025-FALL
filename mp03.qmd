@@ -150,6 +150,7 @@ great_density
 ```
 
 ### County district [`r great_density$CounDist`]{style='color:cyan;'} have  the highest density  of [`r great_density$Great_Density`]{style='color:cyan;'}.
+
 ```{r}
 #|cache: true
 
@@ -210,7 +211,7 @@ nearest_tree<-NYC_trees|>
   
 
 ```
-### The top genus species in Manhattan is  [`r nearest_tree$genusspecies`]{style='color:cyan;'}.
+### The nearest tree to Baruch College is  [`r nearest_tree$genusspecies`]{style='color:cyan;'}.
 
 ## Government Project Design
 
