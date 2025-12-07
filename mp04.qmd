@@ -1,0 +1,531 @@
+---
+title: "mp04"
+author: "Starlette John"
+format:
+  html: 
+    theme: vapor 
+    code-fold: true
+    code-summary: "Show the code"
+execute:
+  echo: true
+  warning: false    
+  message: false     
+---
+
+<style>
+pre {
+  color: cyan
+}
+</style>
+
+
+## Task 1: Download Census Table through HTML.
+
+```{r}
+dir.create('data/mp04')
+
+#| cache: true
+library(httr2) 
+library(tidyverse)
+library(rvest)
+library(R.utils)
+resp <- request("https://data.bls.gov/pdq/SurveyOutputServlet") |>
+    req_method("POST")  |>
+    req_body_form(
+        series_id = "CES0000000001",
+        'request_action'="get_data",
+        'from_year'="1979",
+        'to_year'="2025"
+        
+    )|> 
+    req_perform()
+
+resp_status_desc(resp)
+
+
+census<-resp|> 
+   resp_body_string()|>
+   read_html()|>
+   html_elements( "table")|>
+   html_table(fill=TRUE)
+ 
+Census <- census[[2]]
+
+
+
+
+
+```
+
+```{r}
+#| cache: true
+library(DT)
+library(stringr)
+format_titles <- function(df){
+    colnames(df) <- str_replace_all(colnames(df), "_", " ") |> str_to_title()
+    df
+}  
+
+# Getting rid of that extra row not important to the data.
+Census <- Census[-48, ]
+
+# using the as.Date function to create the date, then filtering out the month and years columns. 
+ CENSUS<-Census %>% 
+  pivot_longer(cols = -Year, names_to = "Month", values_to = "level")|>
+    mutate(date = as.Date(paste(Year, Month, "01", sep = "-"), format = "%Y-%b-%d"))|>
+    select(date,level)
+
+  
+Census<-CENSUS|>
+   filter(date<=as.Date('2025-06-01')& date>= as.Date('1979-01-01'))
+
+Census|>
+    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+column_convert<-c('level')
+Census<-Census %>%
+   mutate(across(all_of(column_convert), as.integer))
+```
+
+
+## Downloading the BLS Data
+```{r}
+
+# getting the bls data
+
+
+library(purrr)
+library (lubridate)
+ua<-'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0'
+resp_2 <- request('https://www.bls.gov/web/empsit/cesnaicsrev.htm') |>
+    req_method("GET") |>   
+    req_headers(
+     'Accept'='text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+     'Accept-Encoding' = 'gzip, deflate, br, zstd',
+     'Accept-Language'= 'en-US,en;q=0.5',
+     `User-Agent` = ua
+     
+
+    )|>
+   req_perform()
+
+resp_status_desc(resp_2)
+
+# the tables id's
+ids<-c(1979:2024)
+
+# gettng all the tables
+payroll <- map(ids, ~ {
+   resp_2 %>% 
+   resp_body_string()|>
+   read_html()|>
+   html_element( paste0("#", .x))%>%
+   html_table()
+ })
+
+# combining all the datasets
+Payroll<-bind_rows(payroll)
+
+# deleting the first two rows that doesnt have row
+Payroll <- Payroll[-1, ]
+Payroll <- Payroll[-1, ]
+
+# getting the first 12 rows for each year
+Payroll<-Payroll|>
+   group_by(Year)|>
+   slice_head(n=12)
+
+Payroll<-unique(Payroll)
+Payroll <- Payroll[-554, ]
+Payroll <- Payroll[-553, ]
+
+
+
+```
+
+```{r}
+#| cache: true
+Payroll<-Payroll|>
+   mutate(date=ymd(paste(Year,Month, '1', sep = "-")))%>%
+     select(
+      date,
+      original=3,
+      final=5,
+      revision=8
+   )
+# deleting the Year column
+Payrolls<-Payroll[,-1]
+
+
+#downloading the 2025 table.
+payroll_2025<-resp_2|>
+  resp_body_html()|>
+  html_element( '#2025')|>
+  html_element('tbody')|>
+  html_table()
+
+payroll_2025<-payroll_2025|>
+   mutate(date=ymd(paste(X2,X1, '1', sep = "-")))%>%
+     select(
+      date,
+      original=3,
+      final=5,
+      revision=8
+   )
+
+payroll_2025<-payroll_2025|>
+   slice_head(n=6)
+
+# combinding both payrolls table to have one full payroll dataframe.
+Payrolls<-rbind(Payrolls,payroll_2025)
+
+# changes the columns from classes to integers for aggregation.
+col_convert<-c('original','final','revision')
+
+Payroll <-Payrolls %>%
+   mutate(across(all_of(col_convert), as.integer))
+
+
+Payroll|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+```
+
+
+
+## Exploration and Visualization
+
+```{r}
+library(dplyr)
+
+# Join the two dataframes
+
+Ces<- inner_join(Census,Payroll, join_by(date==date)) 
+```
+
+
+#### Looking at The Top 10  Max Revisions of Ces 
+
+```{r}
+library(DT)
+library(stringr)
+format_titles <- function(df){
+    colnames(df) <- str_replace_all(colnames(df), "_", " ") |> str_to_title()
+    df
+}  
+library (lubridate)
+
+Max_revision<-Ces|>
+   group_by(year(date),level)|>
+   summarize( largest_revision=max(abs(revision)))|>
+   ungroup()|>
+   slice_max(largest_revision,n=10)|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+Max_revision
+```
+
+
+### Looking at the Total Positive Revision Fraction of Each Year
+
+```{r}
+total_positive_revisions<-Ces|>
+   group_by(year(date))|>
+   summarize( postive_total_percentage=round(mean(revision>0, na.rem=TRUE)*100,2))|>
+   ungroup()|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+
+
+
+total_positive_revisions
+
+```
+
+### Looking at the Mean Absolute by Year
+```{r}
+mean_absolute<-Ces|>
+   group_by(year=year(date))|>
+   summarize(mean_absolute_revision=mean(sum(abs(revision),na.rm=TRUE)))|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+mean_absolute
+```
+
+
+### Looking at the Average CES Revision by Level
+```{r}
+
+average_Ces<-Ces|>
+   arrange(date) |>
+   select(date,level,revision)|>
+   mutate(revision_change=(abs(revision)-lag(abs(revision)))/lag(abs(revision)))|>
+   mutate(revision_level_percentage=round(revision_change/level*100,2))|>
+   summarize(date,level,revision,revision_change,revision_level_percentage)|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+   
+average_Ces
+
+```
+
+
+### Looking at the Negative Revision Percentage by year
+```{r}
+total_negative_revisions<-Ces|>
+   group_by(year(date))|>
+   summarize( negative_total_percentage=round(mean(revision<0, na.rem=TRUE)*100,2))|>
+   ungroup()|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+   
+
+
+total_negative_revisions
+```
+
+### Looking at the Magnitude Revision by Year
+```{r}
+Magnitude_Year<-Ces|>
+   group_by(year(date))|>
+   summarize(revision_magnitude=mean(abs(revision),na.rm=TRUE/final))|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+Magnitude_Year
+```
+
+
+### Magnitude Revision Year Visual 
+```{r}
+Magnitude_year<-Ces|>
+   group_by(year=year(date))|>
+   summarize(revision_magnitude=mean(abs(revision),na.rm=TRUE/final))
+
+library(ggplot2)
+
+ggplot(Magnitude_year,
+       aes(x=year, y=revision_magnitude))+
+   geom_line()+
+  labs(
+    title='Revision Magnitude by Year',
+    x='Year',
+    y='Revision Magnitude'
+    
+  )+
+  theme_dark()
+
+
+
+```
+In the graph above it show that there is some missing data in 2003 however the overall trend of the revision magnitude tends to fluctuate and that it reached its peak in 2021.
+
+### Mean Absolute Revision by Year Visual.
+
+```{r}
+mean_absolute<-Ces|>
+   group_by(year=year(date))|>
+   summarize(mean_absolute_revision=mean(sum(abs(revision),na.rm=TRUE)))
+
+
+ggplot(mean_absolute,
+       aes(x=year, y=mean_absolute_revision))+
+   geom_line()+
+  labs(
+    title='Mean Absolute Revision by Year',
+    x='Year',
+    y='Mean Absolute'
+    
+  )+
+  theme_dark()
+
+
+
+```
+In the graph above it show that while the mean absolute peaked in 2021 there was a rapid decrease in the following  years.
+
+### Top 10 Largest Revisions Level Visual
+
+```{r}
+Max_revision<-Ces|>
+   group_by(year=year(date),level)|>
+   summarize( largest_revision=max(abs(revision)))|>
+   ungroup()|>
+   slice_max(largest_revision,n=10)
+
+ggplot(Max_revision, aes(x =year , y =largest_revision, fill =level)) +
+  geom_bar(stat = "identity", position = "dodge") +
+   labs(
+    title='Top 10 Largest Revisions level',
+    x= 'Year',
+    y='Largest Revision',
+  )+
+  theme_minimal()
+
+
+
+```
+ Above show that around 2020 some of the largest revisions have taken place based on the increase of levels.
+
+
+### Average Ces by Level Visual 
+
+```{r}
+average_Ces<-Ces|>
+   arrange(date) |>
+   select(date,level,revision)|>
+   mutate(revision_change=(abs(revision)-lag(abs(revision)))/lag(abs(revision)))|>
+   mutate(revision_level_percentage=round(revision_change/level*100,2))
+
+ggplot(average_Ces,
+       aes(x=level, y=revision_level_percentage))+
+   geom_line()+
+  labs(
+    title='Average CES Revision Change  by Level',
+    x='Level',
+    y='Revision Level Percentage'
+    
+  )+
+  theme_dark()
+
+```
+
+ In the graph above it shows that in the lower levels the average CES by level was much higher than the following years excluding around the level 150000.
+
+
+## Statisical Analysis
+```{r}
+library(infer)
+library(tidyverse)
+library(rstatix)
+
+Ces_ok <-Ces|>
+    drop_na() 
+
+Average_revision_2020<-Ces_ok |>
+   group_by(year=year(date))|>
+   summarize(revision_mean = round(mean(revision)))
+
+
+
+Average_revision_2020%>%
+  mutate(period = ifelse(year > 2020, "post-2020", "pre-2020")) %>%
+  t_test(revision_mean ~ period, 
+         alternative = "greater")|>
+       datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+
+```
+
+ Here it shows no statistical significance as the p value is greater than 0.05, the statistic and df is small showing that if it was the case that the revision mean is slightly greater, there still not a lot of evidence and not proven to be as significant.
+
+
+```{r}
+negative_fraction_revisions<-Ces|>
+   group_by(year=year(date))|>
+   summarize( negative_total_percentage=mean(revision<0, na.rem=TRUE))|>
+   ungroup()
+
+ negative_fraction_revisions%>%
+  mutate(period = ifelse(year > 2000, "post-2000", "pre-2000")) %>%
+  t_test(negative_total_percentage ~ period, 
+         alternative = "greater")|>
+        datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+
+
+```
+
+
+Here it shows that due to the very high p value which shows that that that even though the statistic is closer to one showing there could that the negative revision had increased that there no significance based on this data alone.
+
+
+
+## Fact Check Revisions
+
+  Some politicians have the claim on how there is a significant increase int he negative revisions in the past few years and how its ruining the job market and our economy. For instance, the CEO of JPMorgan and Chase Jamie Dimon have stated that even with the negative revisions that’s been happening these past few years, we are not going to a recession. Morgan Stanley in the interview with Barbara Kollymeyer, saying that with the job slowdown that means that the recession is over.  I would looking in both of these claim by looking into the negative revision mean of the year.
+  
+```{r}
+total_positive_revisions
+  
+```
+  
+For instance, the positive revision percentage of the beginning of the year to June 2025 is 0 as seen in the table above.
+ 
+```{r}
+total_negative_revisions
+
+```
+  
+  While in this table for 2025 we see that the negative revision percentage is 100% indicating that all the revisions for these 6 months has been totally negative, which usually indicates signs of a recession.
+  
+```{r}
+average_Ces<-Ces|>
+   arrange(date) |>
+   select(date,level,revision)|>
+   mutate(revision_change=(abs(revision)-lag(abs(revision)))/lag(abs(revision)))|>
+   mutate(revision_level_percentage=round(revision_change/level*100,2))|>
+   summarize(date,level,revision,revision_change,revision_level_percentage)|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+   
+
+average_Ces
+```
+  
+```{r}
+average_Ces<-Ces|>
+   arrange(date) |>
+   select(date,level,revision)|>
+   mutate(revision_change=(abs(revision)-lag(abs(revision)))/lag(abs(revision)))|>
+   mutate(revision_level_percentage=round(revision_change/level*100,2))|>
+   summarize(date,level,revision,revision_change,revision_level_percentage)
+
+ggplot(average_Ces,
+       aes(x=level, y=revision_level_percentage))+
+   geom_line()+
+  labs(
+    title='Average CES Revision Change  by Level',
+    x='Level',
+    y='Revision Level Percentage'
+    
+  )+
+  theme_dark()
+
+```
+  
+Then we investigate the CES revision overall by the level as we see the latest level 15942 the Revision level percentage is 0% in the table which shows no change. As you see in the graph the change of the revisions for these levels are increasing low for the higher levels. This shows that it was much higher in the previous years which might go against the claim of a recession happening.
+ 
+ 
+```{r}
+Max_revision<-Ces|>
+   group_by(year=year(date),level)|>
+   summarize( largest_revision=max(abs(revision)))|>
+   ungroup()|>
+   slice_max(largest_revision,n=10)
+
+ggplot(Max_revision, aes(x =year , y =largest_revision, fill =level)) +
+  geom_bar(stat = "identity", position = "dodge") +
+   labs(
+    title='Top 10 Largest Revisions level',
+    x= 'Year',
+    y='Largest Revision',
+  )+
+  theme_minimal()
+
+```
+Here in this chart, we see that the revision level reaches its peak in 2021 which the highest it ever been but as of right now we see the revision whether positive or negative haven't been reached yet.
+ 
+ Finally, to show that both commentators were right in a sense let’s look at the null hypothesis to see if the negative revision have significantly increased these past 5 years.
+
+ 
+```{r}
+ negative_fraction_revisions%>%
+  mutate(period = ifelse(year > 2000, "post-2000", "pre-2000")) %>%
+  t_test(negative_total_percentage ~ period, 
+         alternative = "greater")|>
+        datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+```
+As we see in this statistic when done by a t-test that the p-value of 0.25 showing that there’s no significance with the increase of the negative revisions post 2000 to the prior years. This prove that both commentators were right in a sense. So, on the PolitiFact scale Jim Dimon would be mostly true while Morgan Stanley would be half-true.
