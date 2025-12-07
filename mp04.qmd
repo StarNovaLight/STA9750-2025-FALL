@@ -320,6 +320,7 @@ ggplot(Magnitude_year,
 
 
 ```
+
 In the graph above it show that there is some missing data in 2003 however the overall trend of the revision magnitude tends to fluctuate and that it reached its peak in 2021.
 
 ### Mean Absolute Revision by Year Visual.
