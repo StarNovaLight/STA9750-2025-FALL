@@ -637,5 +637,3 @@ Average_revision_2020%>%
 ```
 Here we could see that the t-statistic is negative which shows that there have been a decreased also the p-value is very high which shows that there is no significance. So, for now based on all this data Kevin Gordon claims would be ranked as False.
 
-
-
