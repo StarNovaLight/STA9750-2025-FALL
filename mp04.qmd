@@ -446,7 +446,8 @@ Here it shows that due to the very high p value which shows that that that even 
 
 ## Fact Check Revisions
 
-  Some politicians have the claim on how there is a significant increase int he negative revisions in the past few years and how its ruining the job market and our economy. For instance, the CEO of JPMorgan and Chase Jamie Dimon have stated that even with the negative revisions that’s been happening these past few years, we are not going to a recession. Morgan Stanley in the interview with Barbara Kollymeyer, saying that with the job slowdown that means that the recession is over.  I would looking in both of these claim by looking into the negative revision mean of the year.
+### Claim 1:
+  Some politicians have the claim on how there is a significant increase int he negative revisions in the past few years and how its ruining the job market and our economy. For instance, the CEO of JPMorgan and Chase Jamie Dimon have stated that even with the negative revisions that’s been happening these past few years, we are not going to a recession.
   
 ```{r}
 total_positive_revisions
@@ -519,7 +520,7 @@ ggplot(Max_revision, aes(x =year , y =largest_revision, fill =level)) +
 ```
 Here in this chart, we see that the revision level reaches its peak in 2021 which the highest it ever been but as of right now we see the revision whether positive or negative haven't been reached yet.
  
- Finally, to show that both commentators were right in a sense let’s look at the null hypothesis to see if the negative revision have significantly increased these past 5 years.
+ Finally, to show that the commentator was right in a sense let’s look at the null hypothesis to see if the negative revision have significantly increased these past 5 years.
 
  
 ```{r}
@@ -529,4 +530,109 @@ Here in this chart, we see that the revision level reaches its peak in 2021 whic
          alternative = "greater")|>
         datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
 ```
-As we see in this statistic when done by a t-test that the p-value of 0.25 showing that there’s no significance with the increase of the negative revisions post 2000 to the prior years. This prove that both commentators were right in a sense. So, on the PolitiFact scale Jim Dimon would be mostly true while Morgan Stanley would be half-true.
+As we see in this statistic when done by a t-test that the p-value of 0.25 showing that there’s no significance with the increase of the negative revisions post 2000 to the prior years. So, on the PolitiFact scale Jim Dimon would be mostly true.
+
+### Claim 2
+
+Kevin Gordon who is a macroeconomic researcher saying how the revisions in 2025 is sending people spiraling and that we may go into a recession soon.  Let see if that claim is proven true.
+
+First let look at the past statistics.
+
+
+```{r}
+mean_absolute<-Ces|>
+   group_by(year=year(date))|>
+   summarize(mean_absolute_revision=mean(sum(abs(revision),na.rm=TRUE)))|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+mean_absolute
+```
+
+Here in the table above it showed that most previous years had a higher mean absolute revision than 2024 and the 6 months of 2025. This shows so far that while that while we are facing the negative revisions as of now the the claim is being blown out of proportion.
+
+```{r}
+total_positive_revisions<-Ces|>
+   group_by(year(date))|>
+   summarize( postive_total_percentage=round(mean(revision>0, na.rem=TRUE)*100,2))|>
+   ungroup()|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+
+
+
+total_positive_revisions
+
+
+```
+ 
+Here is where the main concern relies on that when looking at the table above and examining the year 2025 there shows to be no positive revisions for the year so far. Keep in mind the data was gathered were only 6 months of 2025 meaning we could get a more positive revision sometime later this year. However, it easy to see where Kevin Gordon is basing his claims on
+
+```{r}
+Max_revision<-Ces|>
+   group_by(year(date),level)|>
+   summarize( largest_revision=max(abs(revision)))|>
+   ungroup()|>
+   slice_max(largest_revision,n=10)|>
+   format_titles()|>
+   datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+Max_revision
+
+```
+
+```{r}
+Max_revision<-Ces|>
+   group_by(year=year(date),level)|>
+   summarize( largest_revision=max(abs(revision)))|>
+   ungroup()|>
+   slice_max(largest_revision,n=10)
+
+ggplot(Max_revision, aes(x =year , y =largest_revision, fill =level)) +
+  geom_bar(stat = "identity", position = "dodge") +
+   labs(
+    title='Top 10 Largest Revisions level',
+    x= 'Year',
+    y='Largest Revision',
+  )+
+  theme_minimal()
+
+```
+
+Above in this table it shows that yet 2025 didn’t have one of the largest revisions are its not even in the top 10 when compared to previous years. Which you could also see in the graph above.
+
+```{r}
+mean_absolute<-Ces|>
+   group_by(year=year(date))|>
+   summarize(mean_absolute_revision=mean(sum(abs(revision),na.rm=TRUE)))
+
+
+ggplot(mean_absolute,
+       aes(x=year, y=mean_absolute_revision))+
+   geom_line()+
+  labs(
+    title='Mean Absolute Revision by Year',
+    x='Year',
+    y='Mean Absolute'
+    
+  )+
+  theme_dark()
+
+```
+
+Here in the graph, it shows that the mean absolute revision reached its peaked around 2020 or 2021. However, post these years there has been a significant decrease.
+
+Finally let see if the t-statistics can provide any significance to these claims.
+
+
+```{r}
+
+Average_revision_2020%>%
+  mutate(period = ifelse(year > 2020, "post-2020", "pre-2020")) %>%
+  t_test(revision_mean ~ period, 
+         alternative = "greater")|>
+       datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+```
+Here we could see that the t-statistic is negative which shows that there have been a decreased also the p-value is very high which shows that there is no significance. So, for now based on all this data Kevin Gordon claims would be ranked as False.
