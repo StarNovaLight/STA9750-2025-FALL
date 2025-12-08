@@ -570,37 +570,42 @@ total_positive_revisions
 Here is where the main concern relies on that when looking at the table above and examining the year 2025 there shows to be no positive revisions for the year so far. Keep in mind the data was gathered were only 6 months of 2025 meaning we could get a more positive revision sometime later this year. However, it easy to see where Kevin Gordon is basing his claims on
 
 ```{r}
-Max_revision<-Ces|>
-   group_by(year(date),level)|>
-   summarize( largest_revision=max(abs(revision)))|>
-   ungroup()|>
-   slice_max(largest_revision,n=10)|>
+
+   average_Ces<-Ces|>
+   arrange(date) |>
+   select(date,level,revision)|>
+   mutate(revision_change=(abs(revision)-lag(abs(revision)))/lag(abs(revision)))|>
+   mutate(revision_level_percentage=round(revision_change/level*100,2))|>
+   summarize(date,level,revision,revision_change,revision_level_percentage)|>
    format_titles()|>
    datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
 
-Max_revision
+average_Ces
 
 ```
 
 ```{r}
-Max_revision<-Ces|>
-   group_by(year=year(date),level)|>
-   summarize( largest_revision=max(abs(revision)))|>
-   ungroup()|>
-   slice_max(largest_revision,n=10)
+average_Ces<-Ces|>
+   arrange(date) |>
+   select(date,level,revision)|>
+   mutate(revision_change=(abs(revision)-lag(abs(revision)))/lag(abs(revision)))|>
+   mutate(revision_level_percentage=round(revision_change/level*100,2))|>
+   summarize(date,level,revision,revision_change,revision_level_percentage)
 
-ggplot(Max_revision, aes(x =year , y =largest_revision, fill =level)) +
-  geom_bar(stat = "identity", position = "dodge") +
-   labs(
-    title='Top 10 Largest Revisions level',
-    x= 'Year',
-    y='Largest Revision',
+ggplot(average_Ces,
+       aes(x=level, y=revision_level_percentage))+
+   geom_line()+
+  labs(
+    title='Average CES Revision Change  by Level',
+    x='Level',
+    y='Revision Level Percentage'
+    
   )+
-  theme_minimal()
+  theme_dark()
 
 ```
 
-Above in this table it shows that yet 2025 didn’t have one of the largest revisions are its not even in the top 10 when compared to previous years. Which you could also see in the graph above.
+The highest level in the table indicates the most current absolute revision level change. Above in the table you see for the most recent absolute level change is 0% which is low when compared to the rest of the numbers as this is also shown in the graph. This showed as the years pass that the revision absolute levels are becoming increasingly low indicating that there is a small change.
 
 ```{r}
 mean_absolute<-Ces|>
