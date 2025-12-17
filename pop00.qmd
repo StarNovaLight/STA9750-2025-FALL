@@ -560,6 +560,7 @@ ggplot(Year_Bikes, aes(x =start_station_name , y =total_riders, fill=end_station
     title='Popular Bike routes',
     x='Start Station',
     y='Total Riders',
+    fill= 'End Station'
     
   )+
   theme_minimal()
