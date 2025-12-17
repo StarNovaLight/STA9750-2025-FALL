@@ -1,0 +1,581 @@
+---
+title: " Popular Citi Bike Routes"
+author: "Starlette John"
+format:
+  html:
+    theme: vapor 
+    code-fold: true
+    code-summary: "Show the code"
+execute:
+  echo: true
+  warning: false    
+  message: false   
+---
+<style>
+pre {
+  color: cyan
+}
+</style>
+
+# Most Popular Bike Routes of the Year
+
+## Intro
+
+In New York City there are several different ways to travel. Whether that be cars, trains, buses or even biking people. have plenty of option to choose from based on what’s the most convenient for them at that time. However, New York City a highly populated area and have one of the worst traffics in the country. This is due to the high density of the city, there is heavy traffic due to people trying to travel the same time. this where Citi Bike become more convenient for travel.Citi Bikes is a shareable bike that have many stations all around NYC in each of the five boroughs, and here riders could just use a Citi Bike from one station to the other. Some riders are members and some of them are casual. Citi Bikes help create a sense of a community recreations, more eco-friendly way to travel, and help people get more exercise in this compacted city. This interested my group since we wanted to examine the role of Citi Bikes in NYC. We became interested in looking at several factors of how infrastructure or patterns affect the Citi-Bike usage in Manhattan.
+
+For my specific question I became highly interested in looking at the most popular bike routes Manhattan. We chose Manhattan as the borough to study since that’s the most heavily traffic and condensed place in New York City. We felt this was the best area to study since we could get the most accurate understanding of the Citi Bike system. I was interested in seeing the most popular bike routes and resting places in the city since I felt it would help gain a better understanding for the areas the rider’s preference to bike in.  It will also allow me to understand the type of spaces and infrastructure for popular ridership.    
+
+
+## Data Acquisition 
+```{r}
+
+## Install packages 
+
+library(data.table)
+library(sf)
+library(utils)
+library(readr)
+
+
+
+get_citi_bike_data <- function(){
+    fname <- file.path("data", "pop00", "citibike_manhattan_all_202410_202510.rds")
+    
+
+    if(!file.exists(fname)){
+## Directories 
+
+      raw_dir <- "data/raw"          # for zip files 
+      out_dir <- "data/processed"    # where final RDS will be saved
+      gis_dir <- "data/gis"          # location of borough shapefile
+
+      dir.create(raw_dir, showWarnings = FALSE, recursive = TRUE)
+      dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+      dir.create(gis_dir, showWarnings = FALSE, recursive = TRUE)
+
+
+## increase timeout + stable download 
+
+      options(timeout = max(1200, getOption("timeout")))          
+      options(download.file.method = "libcurl")                   
+
+
+## Months + base URL
+
+      months <- format(
+        seq(as.Date("2024-10-01"), as.Date("2025-10-01"), by = "month"),
+      "%Y%m"
+      )
+
+      base_url <- "https://s3.amazonaws.com/tripdata"
+
+
+## 1) Download and prepare Manhattan GIS polygon 
+
+# NYC DCP borough boundary URL + store path of borough 
+      borough_url <- "https://www.nyc.gov/assets/planning/download/zip/data-maps/open-data/nybb_16a.zip"
+      borough_zip <- file.path(gis_dir, "nyc_boroughs.zip")
+
+# Download only if not already there
+      if (!file.exists(borough_zip)) {
+          message("Downloading NYC borough boundaries shapefile...")
+          download.file(borough_url, borough_zip, mode = "wb")
+        }
+
+# Unzip into GIS directory
+        unzip(borough_zip, exdir = gis_dir)
+
+# Find the shapefile
+      shp_file <- list.files(gis_dir, pattern = "\\.shp$", recursive = TRUE, full.names = TRUE)[1]
+      if (is.na(shp_file)) {
+          stop("No .shp file found in ", gis_dir, " after unzip.")
+        }
+
+# Load the borough polygons
+      boroughs <- st_read(shp_file)
+
+# Transform to standard lat/lon (WGS84, EPSG:4326)
+      boroughs <- st_transform(boroughs, 4326)
+  
+# Extract Manhattan only 
+      name_cols <- names(boroughs)
+
+      if ("BoroName" %in% name_cols) {
+        manhattan_poly <- boroughs[boroughs$BoroName == "Manhattan", ]
+    } else {
+        stop("Could not find a 'boro_name' or 'BoroName' column in borough shapefile.")
+        }
+
+      if (nrow(manhattan_poly) == 0) {
+        stop("Manhattan polygon not found in boroughs shapefile.")
+      }
+
+
+## 2) Download Citi Bike data 
+
+      download_zip <- function(m, max_attempts = 5) {
+        zip_name <- sprintf("%s-citibike-tripdata.zip", m)
+        zip_path <- file.path(raw_dir, zip_name)
+        zip_url  <- paste0(base_url, "/", zip_name)
+  
+        if (file.exists(zip_path)) {
+            message("Zip already exists: ", zip_name)
+            return(zip_path)
+        }
+  
+          for (attempt in seq_len(max_attempts)) {
+           message("Downloading (attempt ", attempt, "): ", zip_name)
+    
+    # Remove any partial file before retry
+          if (file.exists(zip_path)) file.remove(zip_path)
+    
+              ok <- tryCatch({
+                  utils::download.file(
+                  url      = zip_url,
+                  destfile = zip_path,
+                  mode     = "wb",
+                  quiet    = FALSE
+                  )
+                TRUE
+               }, error = function(e) {
+                message("  Download error: ", conditionMessage(e))
+                FALSE
+              })
+    
+          if (ok && file.exists(zip_path)) {
+             message("  Download complete: ", zip_name)
+              return(zip_path)
+          }
+     
+          Sys.sleep(10 * attempt)  # simple backoff
+        }
+  
+          stop("Failed to download after ", max_attempts, " attempts: ", zip_url)
+        }
+
+## 3) Month processor with GIS-based Manhattan filter 
+
+        process_month_manhattan <- function(m) {
+        zip_name <- sprintf("%s-citibike-tripdata.zip", m)
+        zip_path <- file.path(raw_dir, zip_name)
+
+  # Download if missing
+        if (!file.exists(zip_path)) {
+          zip_path <- download_zip(m)
+        }
+  
+        message("\n=== Processing month: ", m, " ===")
+  
+  # 1) Unzip to a temporary directory
+        tmpdir <- file.path(tempdir(), m)
+        dir.create(tmpdir, showWarnings = FALSE)
+        unzip(zip_path, exdir = tmpdir)
+  
+  # 2) List CSV files inside the unzipped folder
+        csv_files <- list.files(tmpdir, pattern = "\\.csv$", full.names = TRUE)
+  
+        if (length(csv_files) == 0) {
+          warning("No CSV files found in ", zip_path)
+          unlink(tmpdir, recursive = TRUE)
+          return(NULL)
+        }
+  
+        month_list <- vector("list", length(csv_files))
+  
+    # 3) Process each CSV
+        for (i in seq_along(csv_files)) {
+            csv <- csv_files[i]
+            message("  Reading: ", basename(csv))
+    
+            dt <- fread(
+            csv,
+            select = c(
+              "ride_id",
+              "rideable_type",
+              "started_at",
+              "ended_at",
+              "start_station_name",
+              "start_station_id",
+              "end_station_name",
+              "end_station_id",
+              "start_lat", "start_lng",
+              "end_lat", "end_lng",
+              "member_casual"
+            )
+          )
+    
+    # Convert to POSIXct
+          dt[, started_at := as.POSIXct(started_at, tz = "America/New_York")]
+          dt[, ended_at   := as.POSIXct(ended_at,   tz = "America/New_York")]
+    
+    # Date/hour format
+          dt[, date := as.Date(started_at)]
+          dt[, hour := as.integer(format(started_at, "%H"))]
+    
+    # GIS filter: keep only trips whose starting long. and lat. point are in Manhattan 
+    # 1) Drop rows with missing start coordinates
+          n_before <- nrow(dt)
+          dt <- dt[!is.na(start_lat) & !is.na(start_lng)]
+          n_after  <- nrow(dt)
+    
+          if (n_after == 0L) {
+            message("    All rows in this CSV had missing start coords; skipping.")
+            month_list[[i]] <- NULL
+            next
+          }
+    
+          if (n_after < n_before) {
+            message("    Dropped ", n_before - n_after, " rows with missing start coords.")
+          }
+    
+    # 2) Convert start coordinates to sf points
+          dt_sf <- st_as_sf(
+            dt,
+            coords = c("start_lng", "start_lat"),
+            crs = 4326,
+            remove = FALSE
+          )
+    
+    # 3) Keep only points inside Manhattan polygon
+          inside_manhattan <- st_within(dt_sf, manhattan_poly, sparse = FALSE)[, 1]
+          dt_manhattan <- dt_sf[inside_manhattan, ]
+    
+    # 4) Drop geometry to go back to data.table
+          dt_manhattan <- as.data.table(st_drop_geometry(dt_manhattan))
+      
+          if (nrow(dt_manhattan) == 0) {
+            message("    No Manhattan-start trips in this chunk after GIS filter.")
+            month_list[[i]] <- NULL
+            next
+          }
+      
+          month_list[[i]] <- dt_manhattan
+    
+          rm(dt, dt_sf, dt_manhattan)
+          gc()
+          }
+
+  # 4) Combine all Manhattan-start trips for this month
+          month_all <- rbindlist(month_list, use.names = TRUE, fill = TRUE)
+  
+  # 5) Clean up temp files
+          unlink(tmpdir, recursive = TRUE)
+  
+          month_all
+          }
+
+
+## 4) Run over all months 
+
+          all_months_list <- vector("list", length(months))
+
+          for (i in seq_along(months)) {
+            m <- months[i]
+            month_all <- process_month_manhattan(m)
+            all_months_list[[i]] <- month_all
+            rm(month_all)
+            gc()
+          }
+     
+
+          citibike_manhattan_all <- rbindlist(all_months_list, use.names = TRUE, fill = TRUE)
+
+# Save as RDS for later use
+
+          out_path <- file.path(out_dir, "citibike_manhattan_all_202410_202510.rds")
+          saveRDS(citibike_manhattan_all, out_path)
+          message("Saved full Manhattan-start dataset to: ", out_path)
+    }
+  
+}
+citibike_manhattan_all <-read_rds("data/processed/citibike_manhattan_all_202410_202510.rds")
+
+
+
+```
+The first thing I did was to download the data. I went to the official Citi bike website where it contains all the data about the Citi Bike ridership in NYC. When looking at the files, I first learn that each month for the past year was contain in a zip file that also contains more files within to break up the data. the first major thing I had to do was figure out a way to all the data safely while not trying to have my system crash. We also had to figure out a way to only get Manhattan data, which was another issue since the Citi Bike data only contains street names. To solve this issue, we downloaded the NYC borough boundaries data, connected it to the Cit Bike dataset, to separate and obtain data for Manhattan for when it downloading giving us data ready to use. Then we safely unzip those files and save it to the folder, for when we were downloading all the zip files to only contain the city bike routes. as we downloaded the Citi Bike data from October 2024-October 2025 and created a function to bind them together so in our environment only one data frame appeared.
+
+## Data Analysis
+
+Here is where I started to do my analysis of the Citi Bike data. First, I investigated the data frame and discovered the variables I would need. Which is ride ID’s which help distinguish the number of trips being taken at these routes, this is the closest way I used for a user ID. Next, I discovered start station name and end station name which I could group together figure out the bike routes. I wanted to look at specific month more closely to see if there was certain trend that was happening. I did this by filtering out the month and the year within each of my function to help get the data for specific months. Then I used the summarize function to use sum to count the distinct ride ID’s that will indicate the different riders for each route. then I ungroup in my function then use the slice max, to give me the top ten in each of my lists. Then I used format title function to organize my column names. Then I used datable to help create a table for each of my list to create a nice table visual to make it look more professional. These were the steps going in to creating my main function for this project
+
+```{r}
+
+#| cache: true
+library(dplyr)
+library(tidyverse)
+library(DT)
+library(stringr)
+format_titles <- function(df){
+    colnames(df) <- str_replace_all(colnames(df), "_", " ") |> str_to_title()
+    df
+}  
+
+
+bikes_2024_10<- citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 10) & (year(date)==2024))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2024_10
+```
+
+When looking at October 2024 the first thing I noticed was that’s routes for central park appeared for times when looking at the top 10 most popular bike routes. This already indicated that central park is one of the most popular riding areas in the city.
+
+```{r}
+
+#| cache: true
+bikes_2024_11<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 11) & (year(date)==2024))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2024_11
+```
+ In November 2024 it’s discovered that total riders have obviously decreased, this could be due to the change in weather where it makes biking a little bit more inconvenient especially when its colder. While central park bike routes dominate the top 3, it shows that there are more smaller streets included in this table.
+
+```{r}
+#| cache: true
+bikes_2024_12<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 12) & (year(date)==2024))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2024_12
+```
+
+In December 2024 when its officially winter, ridership have taken a massive decreased, Central Park bike routes appear twice in the top 10, more smaller streets are included. This led to understanding that big open areas area is not as popular in winter months.
+
+
+```{r}
+#| cache: true
+bikes_2025_01<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 01) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_01
+```
+
+In January 2025 Central Park doesn’t appear at all in the top 10 list. This list entirely composed of smaller streets and there aren’t any round trips as well. This seems that rider just want a fast and direct way to take this trip for convenience. This also indicates the weather becoming more colder and undesirable for Citi bike users due to another decline in total riders.
+
+```{r}
+#| cache: true
+bikes_2025_02<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 02) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_02
+```
+
+In February 2025 its also shows another top 10 list where the ridership is particularly small, and that the list is entirely composed of smaller street that also doesn’t have any round trips.
+
+```{r}
+#| cache: true
+bikes_2025_03<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+   filter((month(date) == 03) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_03
+```
+
+In March 2025 when its officially spring, ridership increased and in fact double from the last month, when looking at the top 10. As Central Park routes appear twice, and there are more round trips this month than the previous month.
+
+```{r}
+#| cache: true
+bikes_2025_04<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 04) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_04
+
+```
+
+In April 2025, Central Park routes appear three times in the top 10 list, there is an increased in ridership and more round trips are being taken.
+
+```{r}
+#| cache: true
+bikes_2025_05<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 05) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_05
+
+```
+
+In May 2025, there are more ridership and round trip being taken.  Central Park routes appeared 5 times within the top 10, indicating nicer. Weather improve Citi bike ridership for more recreational purposes.
+
+```{r}
+#| cache: true
+bikes_2025_06<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 06) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_06
+```
+
+In June 2025, increased in ridership, Central Park routes appear four times in the list, and the top ten list consist of round trips.
+
+```{r}
+#| cache: true
+bikes_2025_07<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 07) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_07
+```
+
+In July 2025, Central Park routes appear 5 times in the top 10, and there is also an increased in ridership.
+
+```{r}
+#| cache: true
+bikes_2025_08<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 08) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_08
+```
+
+In August 2025, Central Park routes appear 5 times in the top 10, there is an increased in ridership, and the list is full of round trips taking place.
+
+```{r}
+#| cache: true
+bikes_2025_09<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 09) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+bikes_2025_09
+```
+
+In September 2025, where the season is shifting to fall, ridership is still high, Central Park routes appear 3 time on the list and the Pier 40 makes its debut on a top 10 list for most popular bike routes in Manhattan.
+
+```{r}
+#| cache: true
+bikes_2025_10<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  filter((month(date) == 10) & (year(date)==2025))|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+
+bikes_2025_10
+
+```
+
+
+
+In October 2025, Ridership is decreasing due to colder weather, Central Park appears 3 times on the top 10 list, round trips are still prevalent.
+
+
+
+
+```{r}
+#| cache: true
+#| 
+Year_Bikes<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)|>
+  format_titles() |>
+  datatable(style='bootstrap5',options=list(searching=FALSE, info=FALSE))
+
+
+Year_Bikes
+
+
+```
+
+
+```{r}
+Year_Bikes<-citibike_manhattan_all|>
+  group_by(start_station_name,end_station_name)|>
+  summarize(total_riders=sum(n_distinct(ride_id)))|>
+  ungroup()|>
+  slice_max(total_riders,n=10)
+
+library(ggplot2)
+ggplot(Year_Bikes, aes(x =start_station_name , y =total_riders, fill=end_station_name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+   labs(
+    title='Popular Bike routes',
+    x='Start Station',
+    y='Total Riders',
+    
+  )+
+  theme_minimal()
+
+
+```
+
+Then after looking at all the monthly data, I wanted to look at the overall year just to see the consensus.  As central park appears three time on the top 10 list, a lot of round trips take majority of the list. Also wanted to create a visual for the most popular bikes route from October 2024- October 2025 so I created a bar chart, using the data analyzed from my top 10 routes of the year function.  I did this by using ggplot and used the start station names for my x axis, the total riders for my y axis, and used the fill for the bar to distinguish in color for the end station names. Then I labeled each axis to what they represent and create the bar chart as seen above. This shows the extreme difference between number one rank which is Central Park S & 6 Ave that’s a round trip, with the rest of the list. As the difference in ridership for the overall yea is very staggering. For most routes on that list, they range around 5000-7000 ridership on the list, when compared to Central Park S & 6 Ave to about 19000 ridership, which triple amount to some of the most popular bike routes. This led to have a greater understanding that Central Park is the area the majority of Citi Bikers want to go.
+
+
+## Implications
+
+The implications from my result shows that, weather patterns and infrastructure do play a role when it comes to Bike routes popularity.  As we seen in the winter months that there is low ridership for the Citi Bikers. This could be explained from several factors, as the weather is not suitable for biking, especially rain and snow would make it difficult to nearly impossible for some riders, they would have to choose another mode of transportation. Central Park usually gets avoid during these months is due to the amount of snow which make it possible to bike, or the ice on the ground is a safety hazard. This also explains that infrastructure does play a role, since normal street would get cleared faster than overall open spaces, due to the necessary access they provide. Also, there was little to no round trips taken during this period, due to people wanting a direct route, indicating more of a necessity than actual enjoyment for some riders. Meanwhile in spring ridership does generally improve a lot, and central parks routes become about half of the top 10 list. This could be explained improvement of weather, they still have lower ridership than the summer and fall months.This could be explained due to external factors, such as seasonal allergies being on the rise again which could make difficult for some Citi Bikers, plus more raining seasons. When looking at the summer months happen ridership increased again, and Central Park routes remain constant in the Top 10 list, this is due to biking becoming a more recreation activity during those months, since we had longer days and nice weather.Then comes the last two months of the data examine September 2025 where the number of riders reach it peaked in all the data I analyze, showing that  Citi Bike a very popular during this month, and Central Park does get  visited a lot of times this month, but Pier 40 also make it appearance for the time in the op 10 list, indicating riders are using Citi Bikes for more recreational reasons during this month. As we see in October 2025 where the number of riders decreased. This probably due to the change of weather,since now it was colder for bikers to use Citi Bike, which impact the ridership in some of these areas. I noticed that some bike routes become more popular on certain months, whether that convenience of infrastructure, or the type of weather the rider is experiencing. Overall, we see that while Central Park routes are consistently popular among riders, overall seasons does have an impact on total ridership.
+
+## Conclusion
+
+This relates to the rest of my group mates specific questions and the overarching question due to several factors. We see here that infrastructure does play a role during certain months, such of which bike lanes are closed, or hardly used due to horrible weather. When you have a large open space such as Central Park maintenance could be extremely difficult especially during the winter months, which could be seen from December-February. We see lower ridership overall, and that smaller streets are becoming more popular among winter months. This could be explained that riders want to take a more direct route to their destination when the weather came become more of a hindrance. Speaking of weather, we see here that it does play an impact of the most popular bike routes, that could be noticed in the table above,that ridership to certain routes is significantly higher in the summer and parts of fall when compared to winter. Due to the changes of season does have an impact on ridership, we see how in certain month mainly January and February that ridership is extremely low. Overall while Citi Bike might be eco-friendly, it could be used for recreational purposes than a necessity, as we see here that Central Park remains of the most prominent areas for Citi Bikers.
+
+
