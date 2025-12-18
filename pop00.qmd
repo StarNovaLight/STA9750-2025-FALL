@@ -324,7 +324,7 @@ bikes_2024_10<- citibike_manhattan_all|>
 bikes_2024_10
 ```
 
-When looking at October 2024 the first thing I noticed was that’s routes for central park appeared for times when looking at the top 10 most popular bike routes. This already indicated that central park is one of the most popular riding areas in the city.
+In this particular function I used filter, and extracted the month from the date which is 10 which represent October, and I extracted the year from date, which is 2024. When looking at October 2024 the first thing I noticed was that’s routes for central park appeared for times when looking at the top 10 most popular bike routes. This already indicated that central park is one of the most popular riding areas in the city.
 
 ```{r}
 
@@ -340,7 +340,7 @@ bikes_2024_11<-citibike_manhattan_all|>
 
 bikes_2024_11
 ```
- In November 2024 it’s discovered that total riders have obviously decreased, this could be due to the change in weather where it makes biking a little bit more inconvenient especially when its colder. While central park bike routes dominate the top 3, it shows that there are more smaller streets included in this table.
+Here I filtered, and extracted the month from the date which is 11, and I extracted the year from date, which is 2024. In November 2024 it’s discovered that total riders have obviously decreased, this could be due to the change in weather where it makes biking a little bit more inconvenient especially when its colder. While central park bike routes dominate the top 3, it shows that there are more smaller streets included in this table.
 
 ```{r}
 #| cache: true
@@ -356,7 +356,7 @@ bikes_2024_12<-citibike_manhattan_all|>
 bikes_2024_12
 ```
 
-In December 2024 when its officially winter, ridership have taken a massive decreased, Central Park bike routes appear twice in the top 10, more smaller streets are included. This led to understanding that big open areas area is not as popular in winter months.
+Here I filtered, and extracted the month from the date which is 12, and I extracted the year from date, which is 2024. In December 2024 when its officially winter, ridership have taken a massive decreased, Central Park bike routes appear twice in the top 10, more smaller streets are included. This led to understanding that big open areas area is not as popular in winter months.
 
 
 ```{r}
@@ -373,7 +373,7 @@ bikes_2025_01<-citibike_manhattan_all|>
 bikes_2025_01
 ```
 
-In January 2025 Central Park doesn’t appear at all in the top 10 list. This list entirely composed of smaller streets and there aren’t any round trips as well. This seems that rider just want a fast and direct way to take this trip for convenience. This also indicates the weather becoming more colder and undesirable for Citi bike users due to another decline in total riders.
+Here I filtered, and extracted the month from the date which is 01, and I extracted the year from date, which is 2025. In January 2025 Central Park doesn’t appear at all in the top 10 list. This list entirely composed of smaller streets and there aren’t any round trips as well. This seems that rider just want a fast and direct way to take this trip for convenience. This also indicates the weather becoming more colder and undesirable for Citi bike users due to another decline in total riders.
 
 ```{r}
 #| cache: true
@@ -389,7 +389,7 @@ bikes_2025_02<-citibike_manhattan_all|>
 bikes_2025_02
 ```
 
-In February 2025 its also shows another top 10 list where the ridership is particularly small, and that the list is entirely composed of smaller street that also doesn’t have any round trips.
+Here I filtered, and extracted the month from the date which is 02, and I extracted the year from date, which is 2025. In February 2025 its also shows another top 10 list where the ridership is particularly small, and that the list is entirely composed of smaller street that also doesn’t have any round trips.
 
 ```{r}
 #| cache: true
@@ -405,7 +405,7 @@ bikes_2025_03<-citibike_manhattan_all|>
 bikes_2025_03
 ```
 
-In March 2025 when its officially spring, ridership increased and in fact double from the last month, when looking at the top 10. As Central Park routes appear twice, and there are more round trips this month than the previous month.
+Here I filtered, and extracted the month from the date which is 03, and I extracted the year from date, which is 2025. In March 2025 when its officially spring, ridership increased and in fact double from the last month, when looking at the top 10. As Central Park routes appear twice, and there are more round trips this month than the previous month.
 
 ```{r}
 #| cache: true
@@ -422,7 +422,7 @@ bikes_2025_04
 
 ```
 
-In April 2025, Central Park routes appear three times in the top 10 list, there is an increased in ridership and more round trips are being taken.
+Here I filtered, and extracted the month from the date which is 04, and I extracted the year from date, which is 2025. In April 2025, Central Park routes appear three times in the top 10 list, there is an increased in ridership and more round trips are being taken.
 
 ```{r}
 #| cache: true
@@ -439,7 +439,7 @@ bikes_2025_05
 
 ```
 
-In May 2025, there are more ridership and round trip being taken.  Central Park routes appeared 5 times within the top 10, indicating nicer. Weather improve Citi bike ridership for more recreational purposes.
+Here I filtered, and extracted the month from the date which is 05, and I extracted the year from date, which is 2025. In May 2025, there are more ridership and round trip being taken.  Central Park routes appeared 5 times within the top 10, indicating nicer. Weather improve Citi bike ridership for more recreational purposes.
 
 ```{r}
 #| cache: true
@@ -455,7 +455,7 @@ bikes_2025_06<-citibike_manhattan_all|>
 bikes_2025_06
 ```
 
-In June 2025, increased in ridership, Central Park routes appear four times in the list, and the top ten list consist of round trips.
+Here I filtered, and extracted the month from the date which is 06, and I extracted the year from date, which is 2025. In June 2025, increased in ridership, Central Park routes appear four times in the list, and the top ten list consist of round trips.
 
 ```{r}
 #| cache: true
@@ -471,7 +471,7 @@ bikes_2025_07<-citibike_manhattan_all|>
 bikes_2025_07
 ```
 
-In July 2025, Central Park routes appear 5 times in the top 10, and there is also an increased in ridership.
+Here I filtered, and extracted the month from the date which is 07, and I extracted the year from date, which is 2025. In July 2025, Central Park routes appear 5 times in the top 10, and there is also an increased in ridership.
 
 ```{r}
 #| cache: true
@@ -487,7 +487,7 @@ bikes_2025_08<-citibike_manhattan_all|>
 bikes_2025_08
 ```
 
-In August 2025, Central Park routes appear 5 times in the top 10, there is an increased in ridership, and the list is full of round trips taking place.
+Here I filtered, and extracted the month from the date which is 08, and I extracted the year from date, which is 2025. .In August 2025, Central Park routes appear 5 times in the top 10, there is an increased in ridership, and the list is full of round trips taking place.
 
 ```{r}
 #| cache: true
@@ -503,7 +503,7 @@ bikes_2025_09<-citibike_manhattan_all|>
 bikes_2025_09
 ```
 
-In September 2025, where the season is shifting to fall, ridership is still high, Central Park routes appear 3 time on the list and the Pier 40 makes its debut on a top 10 list for most popular bike routes in Manhattan.
+Here I filtered, and extracted the month from the date which is 09, and I extracted the year from date, which is 2025. In September 2025, where the season is shifting to fall, ridership is still high, Central Park routes appear 3 time on the list and the Pier 40 makes its debut on a top 10 list for most popular bike routes in Manhattan.
 
 ```{r}
 #| cache: true
@@ -523,7 +523,7 @@ bikes_2025_10
 
 
 
-In October 2025, Ridership is decreasing due to colder weather, Central Park appears 3 times on the top 10 list, round trips are still prevalent.
+Here I filtered, and extracted the month from the date which is 10, and I extracted the year from date, which is 2025. In October 2025, Ridership is decreasing due to colder weather, Central Park appears 3 times on the top 10 list, round trips are still prevalent.
 
 
 
@@ -566,6 +566,21 @@ ggplot(Year_Bikes, aes(x =start_station_name , y =total_riders, fill=end_station
   theme_minimal()
 
 
+```
+
+```{r}
+count_words <- function(url){
+    library(rvest)
+    library(stringi)
+    
+    # Note that this includes code inside an inline block, but omits
+    # full-sized code blocks
+    read_html(url) |>
+        html_elements("main p") |>
+        html_text() |>
+        stri_count_words() |>
+        sum()
+}
 ```
 
 Then after looking at all the monthly data, I wanted to look at the overall year just to see the consensus.  As central park appears three time on the top 10 list, a lot of round trips take majority of the list. Also wanted to create a visual for the most popular bikes route from October 2024- October 2025 so I created a bar chart, using the data analyzed from my top 10 routes of the year function.  I did this by using ggplot and used the start station names for my x axis, the total riders for my y axis, and used the fill for the bar to distinguish in color for the end station names. Then I labeled each axis to what they represent and create the bar chart as seen above. This shows the extreme difference between number one rank which is Central Park S & 6 Ave that’s a round trip, with the rest of the list. As the difference in ridership for the overall yea is very staggering. For most routes on that list, they range around 5000-7000 ridership on the list, when compared to Central Park S & 6 Ave to about 19000 ridership, which triple amount to some of the most popular bike routes. This led to have a greater understanding that Central Park is the area the majority of Citi Bikers want to go.
